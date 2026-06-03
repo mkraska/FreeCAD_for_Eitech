@@ -508,7 +508,34 @@ def schraube_einfuegen(assembly, body, body_label,
 
     # Vorzeichen: Zylinder-CoG zeigt ins Material → axis_global soll entgegengesetzt zeigen
     import Part as P
-    faces = raw_obj.Shape.ancestorsOfType(edge, P.Face)
+
+    faces = []
+    center_local = edge.Curve.Center
+    axis_local = edge.Curve.Axis
+    axis_local.normalize()
+
+    try:
+        faces = raw_obj.Shape.ancestorsOfType(edge, P.Face)
+    except Exception:
+        # Fallback für Display Mode Body = Tip oder STEP-Teile:
+        # Edge kommt aus Link-Shape (Weltkoordinaten), ancestorsOfType braucht
+        # aber eine Edge aus dem Body-Shape (lokales KS)
+        try:
+            linked = raw_obj.getLinkedObject(True) if hasattr(raw_obj, 'getLinkedObject') else None
+            if linked and hasattr(linked, 'Shape'):
+                # center_local ist im Welt-KS des Links → in Body-KS transformieren
+                link_pl = raw_obj.Placement if hasattr(raw_obj, 'Placement') else App.Placement()
+                center_body = link_pl.inverse().multVec(center_local)
+                edge_r = edge.Curve.Radius if hasattr(edge.Curve, 'Radius') else None
+                for e in linked.Shape.Edges:
+                    if not hasattr(e.Curve, 'Center'): continue
+                    if (e.Curve.Center - center_body).Length > 0.1: continue
+                    if edge_r and hasattr(e.Curve, 'Radius') and abs(e.Curve.Radius - edge_r) > 0.01: continue
+                    faces = linked.Shape.ancestorsOfType(e, P.Face)
+                    App.Console.PrintMessage(f"  ancestorsOfType Fallback: {len(faces)} Flächen gefunden\n")
+                    break
+        except Exception as ex2:
+            App.Console.PrintWarning(f"  ancestorsOfType Fallback fehlgeschlagen: {ex2}\n")
     cog_vec = None
     # edge.Curve.Center und face.CenterOfGravity liegen beide im gleichen KS
     # (lokales KS von raw_obj) – kein Transformieren nötig
@@ -522,6 +549,7 @@ def schraube_einfuegen(assembly, body, body_label,
             App.Console.PrintMessage(f"  {type(face.Surface).__name__} R={getattr(face.Surface,'Radius',0):.2f} CoG={cog}  vec_to_cog={cog_vec}\n")
             break
 
+    cog_unbekannt = False
     if cog_vec is not None and cog_vec.Length > 1e-6:
         dot_cog = cog_vec.dot(axis_local)
         App.Console.PrintMessage(f"  dot(cog, axis_local)={dot_cog:.4f}\n")
@@ -529,8 +557,8 @@ def schraube_einfuegen(assembly, body, body_label,
             axis_global = App.Vector(-axis_global.x, -axis_global.y, -axis_global.z)
             App.Console.PrintMessage(f"  axis_global umgedreht (CoG zeigt ins Material)\n")
     else:
-        App.Console.PrintError(f"schrauben_platzierung: Kein Zylinder/Kegel an dieser Kante – kein Loch?\n")
-        raise ValueError("Keine Lochleibung (Zylinder/Kegel) an dieser Kante gefunden.")
+        App.Console.PrintWarning(f"  Kein Zylinder/Kegel gefunden – Orientierung unbekannt, Flip-Button wird angezeigt\n")
+        cog_unbekannt = True
 
     App.Console.PrintMessage(f"  axis_global final: {axis_global}\n")
 
@@ -646,7 +674,7 @@ def schraube_einfuegen(assembly, body, body_label,
         assembly.Document.recompute()
         App.Console.PrintMessage(f"  Zufallsdrehung: {winkel}°\n")
 
-    return joint, lcs_welt, actual_axis, schraube_link, lcs_edge
+    return joint, lcs_welt, actual_axis, schraube_link, lcs_edge, cog_unbekannt
 
 
 def get_mutter_body():
@@ -768,6 +796,7 @@ class SchraubenDialog(QtWidgets.QDialog):
 
         self._letzter_joint         = None
         self._letzter_mutter_joint  = None
+        self._letzter_gesetzter_joint = None
         self._letzter_schraube_link = None
         self._letzter_lcs_bolt_edge = None
         self._letzte_achse_ursprung = None
@@ -790,9 +819,11 @@ class SchraubenDialog(QtWidgets.QDialog):
         import os
         schrauben_doc = None
         datei_name = os.path.basename(SCHRAUBEN_DATEI)
+        bereits_offen = False
         for d in App.listDocuments().values():
             if d.FileName and os.path.basename(d.FileName) == datei_name:
                 schrauben_doc = d
+                bereits_offen = True
                 break
         if schrauben_doc is None:
             try:
@@ -801,10 +832,16 @@ class SchraubenDialog(QtWidgets.QDialog):
             except Exception as e:
                 self._set_status(f"Fehler: Schrauben-Datei nicht gefunden.\n{e}", error=True)
                 return
-        schrauben_doc.recompute()
-        # Ersten Button auslösen damit Body gesetzt wird
+        # recompute nur beim erstmaligen Laden nötig
+        if not bereits_offen:
+            schrauben_doc.recompute()
+        # Ersten Button optisch markieren, Body direkt setzen ohne openDocument
         if self._schrauben_btns:
-            self._schrauben_btns[0].clicked.emit()
+            self._schrauben_btns[0].setChecked(True)
+            self._highlight_active_btn(self._schrauben_btns[0])
+            first_label = self._schrauben_btns[0].property("body_label")
+            self._gewaehlter_label = first_label
+            self._set_status(f"{first_label} gewählt.\nLochrand anklicken …")
 
     # --- UI aufbauen --------------------------------------------------------
 
@@ -821,6 +858,7 @@ class SchraubenDialog(QtWidgets.QDialog):
         for label, body_name in SCHRAUBEN_BODIES.items():
             btn = QtWidgets.QPushButton(label)
             btn.setCheckable(True)
+            btn.setToolTip("Klicke einen Lochrand an")
             btn.setProperty("body_name",  body_name)
             btn.setProperty("body_label", label)
             self._btn_gruppe.addButton(btn)
@@ -834,12 +872,13 @@ class SchraubenDialog(QtWidgets.QDialog):
         if first_btn is not None:
             first_btn.setChecked(True)
 
-        layout.addSpacing(8)
-
-        # Mutter zu bestehender Schraube
-        self._btn_mutter_zu_schraube = QtWidgets.QPushButton("Mutter zu Schraube …")
-        self._btn_mutter_zu_schraube.setToolTip("Schraube anklicken → Vorschau → Fläche anklicken")
+        # Mutter zu bestehender Schraube (kein extra Abstand)
+        self._btn_mutter_zu_schraube = QtWidgets.QPushButton("Mutter")
+        self._btn_mutter_zu_schraube.setToolTip("Klicke eine Schraube an und dann eine Fläche")
         self._btn_mutter_zu_schraube.setCheckable(True)
+        self._btn_mutter_zu_schraube.setProperty("body_name",  None)
+        self._btn_mutter_zu_schraube.setProperty("body_label", None)
+        self._btn_gruppe.addButton(self._btn_mutter_zu_schraube)
         self._btn_mutter_zu_schraube.clicked.connect(self._on_mutter_zu_schraube)
         layout.addWidget(self._btn_mutter_zu_schraube)
 
@@ -856,14 +895,19 @@ class SchraubenDialog(QtWidgets.QDialog):
 
         layout.addSpacing(8)
 
-        # Nachjustieren
-        btn_nachj_schraube = QtWidgets.QPushButton("Nachjustieren Schraube …")
-        btn_nachj_schraube.clicked.connect(self._on_nachjustieren_schraube)
-        layout.addWidget(btn_nachj_schraube)
+        # Flip-Button (nur sichtbar wenn Orientierung unbekannt)
+        self._btn_flip = QtWidgets.QPushButton("⟳ Flip (Orientierung umkehren)")
+        self._btn_flip.setToolTip("Schraube um 180° drehen wenn sie falsch herum sitzt")
+        self._btn_flip.setVisible(False)
+        self._btn_flip.clicked.connect(self._on_flip)
+        layout.addWidget(self._btn_flip)
 
-        btn_nachj_mutter = QtWidgets.QPushButton("Nachjustieren Mutter …")
-        btn_nachj_mutter.clicked.connect(self._on_nachjustieren_mutter)
-        layout.addWidget(btn_nachj_mutter)
+        # Edit Constraint Button
+        self._btn_edit_constraint = QtWidgets.QPushButton("Edit Constraint")
+        self._btn_edit_constraint.setToolTip("Öffnet den FreeCAD Joint-Dialog für die zuletzt erzeugte Verbindung")
+        self._btn_edit_constraint.setEnabled(False)
+        self._btn_edit_constraint.clicked.connect(self._on_edit_constraint)
+        layout.addWidget(self._btn_edit_constraint)
 
         layout.addStretch()
 
@@ -1207,11 +1251,44 @@ class SchraubenDialog(QtWidgets.QDialog):
                 App.Console.PrintMessage(f"  Vorschau entfernen Fehler: {e}\n")
             self._mutter_vorschau_link = None
 
+    def _on_edit_constraint(self):
+        """Öffnet den FreeCAD Joint-Dialog für die zuletzt erzeugte Verbindung."""
+        # _letzter_gesetzter_joint ist der zuletzt gesetzte Joint (Schraube oder Mutter)
+        joint = getattr(self, '_letzter_gesetzter_joint', None)
+        if joint is None:
+            return
+        try:
+            if hasattr(self, '_observer'):
+                Gui.Selection.removeObserver(self._observer)
+            joint.ViewObject.doubleClicked()
+        except Exception as e:
+            App.Console.PrintWarning(f"Edit Constraint fehlgeschlagen: {e}\n")
+        finally:
+            if hasattr(self, '_observer'):
+                Gui.Selection.addObserver(self._observer)
+
+    def _on_flip(self):
+        """Dreht die zuletzt eingefügte Schraube um 180°."""
+        if self._letzter_schraube_link is None:
+            return
+        link = self._letzter_schraube_link
+        actual_axis = link.Placement.Rotation.multVec(App.Vector(0, 0, 1))
+        flip_achse = actual_axis.cross(App.Vector(0, 1, 0))
+        if flip_achse.Length < 1e-6:
+            flip_achse = actual_axis.cross(App.Vector(1, 0, 0))
+        flip = App.Rotation(flip_achse, 180)
+        link.Placement = App.Placement(
+            link.Placement.Base,
+            flip.multiply(link.Placement.Rotation))
+        link.Document.recompute()
+        # Achse aktualisieren
+        self._letzte_achse_richtung = link.Placement.Rotation.multVec(App.Vector(0, 0, 1))
+        self._set_status("Flip ausgeführt. Mutter einfügen oder erneut flippen.")
+        App.Console.PrintMessage("  Flip ausgeführt\n")
+
     def _on_mutter_zu_schraube(self):
         """Startet den Mutter-Workflow für eine bereits eingefügte Schraube."""
-        # Schraube-Buttons deselektieren
-        for btn in self._schrauben_btns:
-            btn.setChecked(False)
+        # Button-Gruppe deselektiert Schrauben-Buttons automatisch
         self._modus = 'warte_schraube_fuer_mutter'
         self._mutter_zu_schraube_aktiv = True
         self._btn_mutter_zu_schraube.setChecked(True)
@@ -1240,11 +1317,16 @@ class SchraubenDialog(QtWidgets.QDialog):
         body_name  = btn.property("body_name")
         body_label = btn.property("body_label")
 
+        # Mutter-zu-Schraube Button wurde über die Gruppe deselektiert → Modus zurücksetzen
+        if body_name is None:
+            return
+
         self._highlight_active_btn(btn)
         self._mutter_zu_schraube_aktiv = False
         if hasattr(self, '_btn_mutter_zu_schraube'):
-            self._btn_mutter_zu_schraube.setChecked(False)
             self._btn_mutter_zu_schraube.setStyleSheet("")
+        if hasattr(self, '_btn_flip'):
+            self._btn_flip.setVisible(False)
 
         # Mutter-Checkbox für Gewindestift deaktivieren
         ist_gewindestift = (body_label == "Gewindestift")
@@ -1254,11 +1336,12 @@ class SchraubenDialog(QtWidgets.QDialog):
 
         # Body aus Schrauben-Dokument holen (muss geöffnet sein)
         schrauben_doc = None
+        import os
+        datei_name = os.path.basename(SCHRAUBEN_DATEI)
         for d in App.listDocuments().values():
-            if SCHRAUBEN_DATEI.endswith(d.FileName.replace("/", "\\")):
-                schrauben_doc = d
-                break
-            if d.FileName and d.FileName.split("\\")[-1] == SCHRAUBEN_DATEI.split("\\")[-1]:
+            if not d.FileName:
+                continue
+            if os.path.basename(d.FileName) == datei_name:
                 schrauben_doc = d
                 break
 
@@ -1339,11 +1422,12 @@ class SchraubenDialog(QtWidgets.QDialog):
                 real_center=real_center,
                 zufaellig_drehen=self._cb_zufall.isChecked()
             )
-            joint, center_global, axis_global, schraube_link, lcs_bolt_edge = result
+            joint, center_global, axis_global, schraube_link, lcs_bolt_edge, cog_unbekannt = result
         except ValueError as e:
             self._set_status(str(e), error=True)
             joint = schraube_link = lcs_bolt_edge = None
             center_global = axis_global = None
+            cog_unbekannt = False
         finally:
             self._einfuegen_aktiv = False
 
@@ -1352,12 +1436,17 @@ class SchraubenDialog(QtWidgets.QDialog):
             return
 
         self._letzter_joint         = joint
+        self._letzter_gesetzter_joint = joint
         self._letzter_schraube_link = schraube_link
         self._letzter_lcs_bolt_edge = lcs_bolt_edge
         self._letzte_achse_ursprung = center_global
         self._letzte_achse_richtung = axis_global
+        self._btn_edit_constraint.setEnabled(True)
 
-        if self._cb_mutter.isChecked():
+        if cog_unbekannt:
+            self._btn_flip.setVisible(True)
+            self._set_status(f"{self._gewaehlter_label} eingefügt.\n⚠ Orientierung unbekannt – ggf. Flip drücken.")
+        elif self._cb_mutter.isChecked():
             self._mutter_vorschau()
         else:
             self._set_status(f"{self._gewaehlter_label} eingefügt.\nNächsten Lochrand anklicken …")
@@ -1394,6 +1483,8 @@ class SchraubenDialog(QtWidgets.QDialog):
             )
             if joint:
                 self._letzter_mutter_joint = joint
+                self._letzter_gesetzter_joint = joint
+                self._btn_edit_constraint.setEnabled(True)
                 # Zufallsdrehung ±30° in 10°-Schritten
                 if self._cb_zufall.isChecked():
                     import random as _random
