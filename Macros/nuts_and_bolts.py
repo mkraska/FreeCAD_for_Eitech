@@ -1,5 +1,4 @@
-# nuts_and_bolts.py  v0.4
-# Eitech Workbench – Schrauben und Muttern in Assembly einfügen
+# nuts_and_bolts.py  v1.1
 # Eitech Workbench – Schrauben und Muttern in Assembly einfügen
 #
 # Aufruf: Als Makro in FreeCAD 1.1 ausführen
@@ -20,6 +19,40 @@ try:
     from PySide6 import QtWidgets, QtCore
 except ImportError:
     from PySide2 import QtWidgets, QtCore
+
+
+# ---------------------------------------------------------------------------
+# Icons (Base64)
+# ---------------------------------------------------------------------------
+ICONS = {}
+ICONS["Gewindestift"] = "iVBORw0KGgoAAAANSUhEUgAAADgAAAA4CAYAAACohjseAAAEN0lEQVR4nO2YXW8VRRiAn5md3e12S9vDZ3va0AJ+kxouCkKMxkjQGyKQABqv/A3qL1AvNF4ZEo3cGk30Qi5MDAkIBosmRlBJDASxYkukSAunPYezZz9mxotjiyZemLibsMk+V7vZzew8eWff950RCwsLlhyx1uK6Lr7vY+1/H7rT6WCMyXMqAMjcR7zHqATLTiX4f9Fadz8k735q+Xr5WZEUJmitxVpLGIY4jkOr1cIYgzGGVquFlJIwDFfeLQpVxKDWWqSUSCk5duxTTnxxms2bNvHqKy8D8P7Ro/wy/Ss7t09y8NAhlKuIoqiIqSDyroPGGIIgQAh48623uXb9Bk88tZsL579l68MPAfDTxUts276TM6dOooTljddfIwxD2u32P5ZyHuS+RIWQWGN4972jTP92jb37DhCGvVgkRvVgVA8Wie95HDh4mGbU4Z0jR4jjOHc5yFnQGENvb8CPFy4wN3+bsfExtNZ0Oh08z6NWq1Gr1fA8jySJSbOMkfoIU2e/5uKlSwRBkHs3k6ugtRbHcZiZnWV88304jmJpcZG+vj6stWit0VpjrCEIeum02zQatxkZHcUUlFFzFRRCYIxhw7r1NJcWmdyxi5mrV7ly+fJKZKy1CCG4+ccNvjk7RX10lNVr1pKVRTBNU4brI8zOXEU6Doeff4EHNm8kat9BCIFSilvz8/xw7juG6nWCoJeb8/MMDtYwWiOEyHNK+ScZaw3KVQwN1zl14jhJ1GT/vucYGh4mzTKstfStWsXWR7cRtdt8f/4cq9dtIAhDtMk/irnXQSEEWZYRhn14ns8HH37Ex5+4LDWbPPjIBEIIlhYXmTrzJZm1DNRq9IZ9ZGmae/SgkE7G4roeWms8z6M+shGhfKIoQohum5akKUH/ABvqI7jKReusEDnIOYLWWpRymZ2doRNFrOrvJ05i+gf6WZj3Of75Zxht6MQJ69esJU1SoNv1iAJqIBQg6DiKubnrRFHEwOAgQgh0phkdG6e51KTVauL4PRht6AZNdGtlFCHEPV7opZTEccyOyUm0ThBCIITAWkuWpkgpUcrFGoux3bKhXI+bc9fRaXLv/4NCCDqdDmPjYzz95ONMX/kZISS+76OU6i5FAY7j4CoXpMPv12bZ+8xuJiYm/vpP85XMPYtKKblzp82ze/agHIeTp78iihOU55NpTbvdZqnZJEliAs/lpRcPc2D/fhqNRiG9aO67ieVTNdfzCHp6uHVrgamps1yZ/pVGY5EsyxgcHOD+LVvYtfMxhoaHiaKIOI4LOVUrTND3fbTWXVnX7T4zBgQrySTLMpIkQUpZ2LFhIRveZaSUKxIrCQewxrJcHopYln+nUEHoJh7Hce7eAzjFFPV/ozpVKzuVYNmpBMtOJVh2KsGyUwmWnUqw7FSCZacSLDuVYNmpBMtOJVh2KsGyUwmWnUqw7PwJZEHKaWSo0XQAAAAASUVORK5CYII="
+ICONS["Mutter"] = "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"
+ICONS["Schraube_6_Schlitz"] = "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"
+ICONS["Schraube_8_Schlitz"] = "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"
+ICONS["Schraube_12_Schlitz"] = "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"
+ICONS["Schraube_16_Schlitz"] = "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"
+
+
+def _icon(name):
+    """Lädt ein Icon, Hintergrund weiß."""
+    import base64
+    data = ICONS.get(name)
+    if data is None:
+        return QtGui.QIcon()
+    from PySide6 import QtGui as _QtGui
+    pix = _QtGui.QPixmap()
+    pix.loadFromData(base64.b64decode(data), "PNG")
+    img = pix.toImage().convertToFormat(_QtGui.QImage.Format_ARGB32)
+    bg = _QtGui.QColor(237, 237, 237)
+    white = _QtGui.QColor(255, 255, 255)
+    for x in range(img.width()):
+        for y in range(img.height()):
+            c = _QtGui.QColor(img.pixel(x, y))
+            if abs(c.red()-bg.red()) < 25 and abs(c.green()-bg.green()) < 25 and abs(c.blue()-bg.blue()) < 25:
+                img.setPixelColor(x, y, white)
+    pix = _QtGui.QPixmap.fromImage(img)
+    return _QtGui.QIcon(pix)
+
 
 # ---------------------------------------------------------------------------
 # Observer-Verwaltung: beim Neustart alle alten Observer entfernen
@@ -69,6 +102,16 @@ SCHRAUBEN_BODIES = {
 LCS_BOLT_NAME = "LCS_bolt"
 LCS_NUT_NAME  = "LCS_nut"
 MUTTER_LABEL     = "Mutter"
+MUTTER_DICKE     = 3.2
+
+# Format für Dialog: (Anzeigename, Body-Name, Icon-Name, ist_gewindestift)
+SCHRAUBEN = [
+    ("Schraube 6 Schlitz",  "Body",    "Schraube_6_Schlitz",  False),
+    ("Schraube 8 Schlitz",  "Body001", "Schraube_8_Schlitz",  False),
+    ("Schraube 12 Schlitz", "Body002", "Schraube_12_Schlitz", False),
+    ("Schraube 16 Schlitz", "Body003", "Schraube_16_Schlitz", False),
+    ("Gewindestift",        "Body005", "Gewindestift",        True),
+]
 
 # ---------------------------------------------------------------------------
 # Geometrie-Hilfsfunktionen
@@ -194,22 +237,49 @@ def get_active_assembly():
 
 def link_zu_assembly(assembly, body, label):
     """Fügt einen App::Link für body zur Assembly hinzu."""
-    # Eindeutiger interner Name aus Label ableiten (Leerzeichen ersetzen)
     internal_name = label.replace(' ', '_').replace('ü','ue').replace('ä','ae').replace('ö','oe')
     item = assembly.newObject("App::Link", internal_name)
     item.LinkedObject = body
     item.Label = label
-    App.ActiveDocument.recompute()
     return item
+
+
+def _strip_link_prefix(link_obj, subelement_name):
+    """
+    SubElementNames aus Gui.Selection.getSelectionEx('', 0) sind relativ zum
+    ganz oben selektierten Objekt (z.B. der Root-Assembly) und enthalten
+    dadurch bei verschachtelten Sub-Assemblies den Namen von link_obj selbst
+    als redundantes erstes Pfad-Segment (z.B. 'Assembly001.Assembly002.Body.Edge6'
+    obwohl link_obj bereits 'Assembly001' ist).
+    Joint.ReferenceX erwartet aber einen SubElementName RELATIV zu link_obj
+    -> redundantes Präfix entfernen, sonst schlägt getSubObject() fehl und
+    der Joint bekommt eine falsche/zufällige Placement.
+    """
+    if link_obj is None or not subelement_name:
+        return subelement_name
+    prefix = link_obj.Name + "."
+    if subelement_name.startswith(prefix):
+        return subelement_name[len(prefix):]
+    return subelement_name
 
 
 def fixed_joint_erstellen(assembly, ref1_link, ref1_edge_name,
                            ref2_link, ref2_edge_name,
                            label="StarrerVerbund"):
     """
-    Legt einen Fixed Joint an. Detach=False, FreeCAD berechnet alles selbst.
+    Legt einen Fixed Joint an ohne globales recompute().
     """
+    if ref1_link is None or ref1_edge_name is None:
+        App.Console.PrintError(f"fixed_joint_erstellen: ref1_link={ref1_link} ref1_edge_name={ref1_edge_name}\n")
+        return None
+    if ref2_link is None or ref2_edge_name is None:
+        App.Console.PrintError(f"fixed_joint_erstellen: ref2_link={ref2_link} ref2_edge_name={ref2_edge_name}\n")
+        return None
     doc = App.ActiveDocument
+
+    # Redundantes Namens-Präfix entfernen (siehe _strip_link_prefix)
+    ref1_edge_name = _strip_link_prefix(ref1_link, ref1_edge_name)
+    ref2_edge_name = _strip_link_prefix(ref2_link, ref2_edge_name)
 
     joints_group = None
     for obj in assembly.OutList:
@@ -228,9 +298,6 @@ def fixed_joint_erstellen(assembly, ref1_link, ref1_edge_name,
     joint.Detach1   = False
     joint.Detach2   = False
 
-    # Erst recompute damit die Schraube im Dokument registriert ist
-    doc.recompute()
-
     try:
         joint.Reference1 = (ref1_link, [ref1_edge_name, ref1_edge_name])
     except Exception as e:
@@ -241,25 +308,20 @@ def fixed_joint_erstellen(assembly, ref1_link, ref1_edge_name,
         App.Console.PrintMessage(f"  Reference2 Fehler: {e}\n")
 
     joint.Visibility = False
-    doc.recompute()
+    joint.recompute()
+
     p1_after = joint.Placement1
     p2_after = joint.Placement2
-    App.Console.PrintMessage(f"  Nach recompute: P1={p1_after.Base} Q1={p1_after.Rotation.Q}\n")
-    App.Console.PrintMessage(f"                  P2={p2_after.Base} Q2={p2_after.Rotation.Q}\n")
 
-    # Wenn FreeCAD eine ~180°-Rotation gewählt hat (|Q2.w| < 0.1 und |Q1.w| > 0.9)
-    # dann hat FreeCAD die falsche Orientierung gewählt → invertieren
+    # ~180°-Rotation korrigieren
     q2w = p2_after.Rotation.Q[3]
     q1w = p1_after.Rotation.Q[3]
     if abs(q2w) < 0.1 and abs(q1w) > 0.9:
-        App.Console.PrintMessage(f"  Q2 zeigt ~180°-Rotation (w={q2w:.3f}) → Joint invertieren\n")
         flip = App.Rotation(App.Vector(0, 1, 0), 180)
         joint.Detach1 = True
         p1c = joint.Placement1
         joint.Placement1 = App.Placement(p1c.Base, p1c.Rotation.multiply(flip))
-        doc.recompute()
-        App.Console.PrintMessage(f"  Nach Inversion: P1={joint.Placement1.Base} Q1={joint.Placement1.Rotation.Q}\n")
-        App.Console.PrintMessage(f"                  P2={joint.Placement2.Base} Q2={joint.Placement2.Rotation.Q}\n")
+        joint.recompute()
 
     return joint
 
@@ -286,7 +348,7 @@ def joint_orientierung_pruefen_und_korrigieren(joint, schraube_link, lcs_placeme
         p1 = joint.Placement1
         joint.Detach1 = True
         joint.Placement1 = App.Placement(p1.Base, p1.Rotation.multiply(flip))
-        App.ActiveDocument.recompute()
+        pass  # kein globales recompute
     else:
         App.Console.PrintMessage(f"  → Orientierung korrekt\n")
 
@@ -438,7 +500,6 @@ def get_face_normal_at_edge(edge, raw_obj):
                     App.Console.PrintMessage(f"  Zylinder CoG-Methode normal (Welt): {normal}\n")
                     return normal
 
-        App.Console.PrintMessage(f"  Keine passende Fläche in ancestors\n")
         return None
     except Exception as e:
         App.Console.PrintMessage(f"  Flächennormale Fehler: {e}\n")
@@ -469,20 +530,17 @@ def schraube_einfuegen(assembly, body, body_label,
     """
     Fügt eine Schraube (body) als Link in assembly ein und verbindet sie
     mit einem Fixed Constraint an der gewählten Kreiskante.
-    click_pos: 3D-Klickpunkt zur Bestimmung der Kopfseite.
     """
-    # 1. LCS_bolt im Schrauben-Body auslesen
+    App.Console.PrintMessage(f"Schritt 1: LCS_bolt aus Schrauben-Body lesen\n")
     try:
         p1 = lcs_placement_im_body(body, LCS_BOLT_NAME)
-        App.Console.PrintMessage(f"  LCS_bolt Placement: P={p1.Base} Q={p1.Rotation.Q}\n")
     except ValueError as e:
-        App.Console.PrintError(f"schrauben_platzierung: {e}\n")
+        App.Console.PrintError(f"LCS_bolt nicht gefunden: {e}\n")
         return None
 
     basis_rotation = p1.Rotation
 
-    # 2. Kreisachse und Mittelpunkt in Weltkoordinaten
-    # real_center kommt aus getSelectionEx('',0) → bereits in Weltkoordinaten
+    App.Console.PrintMessage(f"Schritt 2: Kreisachse und Mittelpunkt in Weltkoordinaten\n")
     if real_center is not None:
         center_global = App.Vector(real_center.x, real_center.y, real_center.z)
     else:
@@ -491,7 +549,6 @@ def schraube_einfuegen(assembly, body, body_label,
         center_global = link_pl.multVec(edge.Curve.Center)
     axis_global   = edge.Curve.Axis
     axis_global.normalize()
-    App.Console.PrintMessage(f"  Edge.Curve.Axis (roh): {axis_global}\n")
 
     # Flächennormale der anliegenden ebenen Fläche bestimmen
     # (zeigt vom Material weg = Kopfseite)
@@ -499,68 +556,210 @@ def schraube_einfuegen(assembly, body, body_label,
     if real_axis is not None:
         axis_global = App.Vector(real_axis.x, real_axis.y, real_axis.z)
         axis_global.normalize()
-        App.Console.PrintMessage(f"  Edge.Curve.Axis (roh): {edge.Curve.Axis}\n")
-        App.Console.PrintMessage(f"  real_axis (resolve=0): {axis_global}\n")
     else:
         axis_global = edge.Curve.Axis
         axis_global.normalize()
-        App.Console.PrintMessage(f"  Edge.Curve.Axis (roh): {axis_global}\n")
 
-    # Vorzeichen: Zylinder-CoG zeigt ins Material → axis_global soll entgegengesetzt zeigen
+    App.Console.PrintMessage(f"Schritt 2: Achse={axis_global}  Mittelpunkt={center_global}\n")
+    App.Console.PrintMessage(f"Schritt 3: Vorzeichen der Achse bestimmen (CoG-Methode)\n")
     import Part as P
 
+    def _find_adjacent_faces_geometric(target_edge, shape, tol=1e-4):
+        """
+        Fallback für ancestorsOfType: sucht Flächen, deren Kreiskante
+        geometrisch (Center/Achse/Radius) zur target_edge passt, statt
+        exakte Shape-Identität vorauszusetzen.
+        Nötig bei tief verschachtelten / gespiegelten Sub-Assemblies, wo
+        die selektierte Edge eine transformierte Kopie ist und
+        ancestorsOfType mit 'NCollection_IndexedDataMap::FindFromKey'
+        fehlschlägt.
+        Gibt (faces, matched_local_edge) zurück – matched_local_edge stammt
+        garantiert aus `shape` selbst und ist damit im gleichen lokalen KS
+        wie face.CenterOfGravity (im Gegensatz zu target_edge, die evtl.
+        eine transformierte Kopie aus einem anderen KS ist).
+        """
+        try:
+            t_center = target_edge.Curve.Center
+            t_axis   = target_edge.Curve.Axis
+            t_axis.normalize()
+            t_radius = target_edge.Curve.Radius
+        except Exception:
+            return [], None
+
+        matches = []
+        matched_local_edge = None
+        for face in shape.Faces:
+            for e in face.Edges:
+                try:
+                    if not isinstance(e.Curve, P.Circle):
+                        continue
+                    if abs(e.Curve.Radius - t_radius) > tol:
+                        continue
+                    if (e.Curve.Center - t_center).Length > tol:
+                        continue
+                    ax = e.Curve.Axis
+                    ax.normalize()
+                    if abs(abs(ax.dot(t_axis)) - 1.0) > 1e-3:
+                        continue
+                    matches.append(face)
+                    if matched_local_edge is None:
+                        matched_local_edge = e
+                    break
+                except Exception:
+                    continue
+        return matches, matched_local_edge
+
+    # raw_obj ist bereits das per getSelectionEx('', 0) (resolve=0) korrekt
+    # aufgelöste Feature-Objekt. Für die reine Vorzeichen-Bestimmung
+    # (welche Seite der Kante zeigt zum Material) brauchen wir KEINE
+    # Weltkoordinaten – nur ein für Kante und Fläche konsistentes KS, der
+    # Dot-Product-Vergleich ist unter jeder starren Transformation invariant.
+    #
+    # Schnellster & robustester Weg: das tatsächliche Bauteil (z.B.
+    # Kühlergrill_LKW) über raw_obj.getSubObjectList(edge_name) auflösen
+    # (liefert die Objekt-Kette, kein Shape-Transform nötig) und den
+    # Edge-Index aus dem letzten SubElementName-Segment ('Edge150' -> 149)
+    # direkt im LOKALEN Shape dieses Bauteils verwenden. Kein Weltkoordinaten-
+    # Transform, keine großen Compound-Shapes -> kein 'hasher mismatch',
+    # deutlich schneller (nur die Edges des Bauteils selbst statt des
+    # gesamten Assemblies).
     faces = []
-    center_local = edge.Curve.Center
-    axis_local = edge.Curve.Axis
-    axis_local.normalize()
+    local_edge_for_cog = edge  # Fallback: Original-Edge-Objekt
+    lokal_erfolgreich = False
+
+    # Für den Fixed Joint (Schritt 6) brauchen wir ein Referenz-Objekt +
+    # einen dazu RELATIVEN SubElementName. Standard (Fallback, falls die
+    # lokale Methode unten scheitert): target_link + voller edge_name
+    # (mit redundantem Präfix, das _strip_link_prefix() später entfernt).
+    # Bei Erfolg der lokalen Methode wird das direkt durch das echte
+    # Blatt-Objekt + den simplen lokalen Edge-Namen ersetzt (verifiziert an
+    # der Konsole: liefert exakt dasselbe Placement2, aber ganz ohne
+    # Präfix-Stringoperationen und ohne die kryptischen Hash-Segmente).
+    joint_ref2_link = target_link
+    joint_ref2_edge_name = edge_name
 
     try:
-        faces = raw_obj.Shape.ancestorsOfType(edge, P.Face)
-    except Exception:
-        # Fallback für Display Mode Body = Tip oder STEP-Teile:
-        # Edge kommt aus Link-Shape (Weltkoordinaten), ancestorsOfType braucht
-        # aber eine Edge aus dem Body-Shape (lokales KS)
+        kette = raw_obj.getSubObjectList(edge_name)
+        leaf_obj = kette[-1]
+        letztes_segment = edge_name.split('.')[-1]
+        if letztes_segment.startswith('Edge') and hasattr(leaf_obj, 'Shape'):
+            edge_idx = int(letztes_segment[4:]) - 1
+            local_shape = leaf_obj.Shape
+            if 0 <= edge_idx < len(local_shape.Edges):
+                kandidat_edge = local_shape.Edges[edge_idx]
+                if (isinstance(kandidat_edge.Curve, P.Circle)
+                        and abs(kandidat_edge.Curve.Radius - edge.Curve.Radius) < 1e-4):
+                    try:
+                        faces = local_shape.ancestorsOfType(kandidat_edge, P.Face)
+                    except Exception:
+                        faces = []
+                    if not faces:
+                        faces, matched = _find_adjacent_faces_geometric(kandidat_edge, local_shape)
+                        if matched is not None:
+                            kandidat_edge = matched
+                    if faces:
+                        local_edge_for_cog = kandidat_edge
+                        lokal_erfolgreich = True
+                        # Joint-Referenz auf das echte Blatt-Objekt umstellen
+                        # (an der Konsole verifiziert: identisches Placement2
+                        # wie über target_link + Präfix-gestripptem Pfad).
+                        joint_ref2_link = leaf_obj
+                        joint_ref2_edge_name = letztes_segment
+                        App.Console.PrintMessage(
+                            f"Schritt 3: {len(faces)} Flächen rein lokal auf "
+                            f"{leaf_obj.Name} (Edge-Index {edge_idx}, "
+                            f"{len(local_shape.Edges)} Edges im Bauteil) gefunden\n")
+                else:
+                    App.Console.PrintWarning(
+                        f"Schritt 3: lokaler Edge-Index {edge_idx} auf {leaf_obj.Name} "
+                        f"passt nicht zur Kreiskante (Radius-Mismatch)\n")
+            else:
+                App.Console.PrintWarning(
+                    f"Schritt 3: Edge-Index {edge_idx} außerhalb "
+                    f"({len(local_shape.Edges)} Edges auf {leaf_obj.Name})\n")
+    except Exception as ex:
+        App.Console.PrintWarning(f"Schritt 3: lokale Edge-Index-Methode fehlgeschlagen: {ex}\n")
+
+    if not lokal_erfolgreich:
+        App.Console.PrintWarning(
+            "Schritt 3: lokale Methode nicht erfolgreich – "
+            "versuche welt-transformierte Kandidaten als Fallback\n")
+        search_kandidaten = []
         try:
-            linked = raw_obj.getLinkedObject(True) if hasattr(raw_obj, 'getLinkedObject') else None
-            if linked and hasattr(linked, 'Shape'):
-                # center_local ist im Welt-KS des Links → in Body-KS transformieren
-                link_pl = raw_obj.Placement if hasattr(raw_obj, 'Placement') else App.Placement()
-                center_body = link_pl.inverse().multVec(center_local)
-                edge_r = edge.Curve.Radius if hasattr(edge.Curve, 'Radius') else None
-                for e in linked.Shape.Edges:
-                    if not hasattr(e.Curve, 'Center'): continue
-                    if (e.Curve.Center - center_body).Length > 0.1: continue
-                    if edge_r and hasattr(e.Curve, 'Radius') and abs(e.Curve.Radius - edge_r) > 0.01: continue
-                    faces = linked.Shape.ancestorsOfType(e, P.Face)
-                    App.Console.PrintMessage(f"  ancestorsOfType Fallback: {len(faces)} Flächen gefunden\n")
-                    break
-        except Exception as ex2:
-            App.Console.PrintWarning(f"  ancestorsOfType Fallback fehlgeschlagen: {ex2}\n")
-    cog_vec = None
-    # edge.Curve.Center und face.CenterOfGravity liegen beide im gleichen KS
-    # (lokales KS von raw_obj) – kein Transformieren nötig
-    center_local = edge.Curve.Center
-    axis_local = edge.Curve.Axis
+            objekt_pfad = edge_name.rsplit('.', 1)[0] + '.'
+            bauteil_shape = raw_obj.getSubObject(objekt_pfad)
+            if bauteil_shape is not None and hasattr(bauteil_shape, 'Faces') and bauteil_shape.Faces:
+                search_kandidaten.append((f"Bauteil (Pfad='{objekt_pfad}')", bauteil_shape))
+        except Exception:
+            pass
+        if target_link is not None and hasattr(target_link, 'Shape') and target_link.Name != raw_obj.Name:
+            search_kandidaten.append((f"target_link={target_link.Name}", target_link.Shape))
+        search_kandidaten.append((f"raw_obj={raw_obj.Name}", raw_obj.Shape))
+
+        for such_label, such_shape in search_kandidaten:
+            try:
+                faces = such_shape.ancestorsOfType(edge, P.Face)
+                if not faces:
+                    raise ValueError("ancestorsOfType lieferte 0 Flächen")
+                App.Console.PrintMessage(
+                    f"Schritt 3: {len(faces)} angrenzende Flächen gefunden ({such_label})\n")
+                break
+            except Exception as ex:
+                App.Console.PrintWarning(
+                    f"Schritt 3: ancestorsOfType auf {such_label} fehlgeschlagen ({ex}) – "
+                    f"versuche geometrischen Fallback\n")
+                try:
+                    faces, matched_local_edge = _find_adjacent_faces_geometric(edge, such_shape)
+                    if faces:
+                        if matched_local_edge is not None:
+                            local_edge_for_cog = matched_local_edge
+                        App.Console.PrintMessage(
+                            f"Schritt 3: {len(faces)} Flächen via geometrischem Fallback "
+                            f"auf {such_label} gefunden\n")
+                        break
+                except Exception as ex2:
+                    App.Console.PrintWarning(
+                        f"Schritt 3: geometrischer Fallback auf {such_label} fehlgeschlagen: {ex2}\n")
+
+    # center_local/axis_local stammen aus local_edge_for_cog, die garantiert
+
+    # im gleichen lokalen KS liegt wie face.CenterOfGravity -> kein
+    # Transformieren nötig.
+    center_local = local_edge_for_cog.Curve.Center
+    axis_local   = local_edge_for_cog.Curve.Axis
     axis_local.normalize()
+
+    cog_vec = None
     for face in faces:
         if isinstance(face.Surface, (P.Cylinder, P.Cone)):
-            cog = face.CenterOfGravity
-            cog_vec = cog - center_local
-            App.Console.PrintMessage(f"  {type(face.Surface).__name__} R={getattr(face.Surface,'Radius',0):.2f} CoG={cog}  vec_to_cog={cog_vec}\n")
+            cog_lokal = face.CenterOfGravity
+            cog_vec   = cog_lokal - center_local
+            App.Console.PrintMessage(
+                f"Schritt 3: Zylinder R={face.Surface.Radius:.2f}  CoG_lokal={cog_lokal}\n")
             break
+
+    if cog_vec is None:
+        # Fallback: ebene Fläche, Normale nach außen
+        for face in faces:
+            if isinstance(face.Surface, P.Plane):
+                normal_lokal = face.Surface.Axis
+                cog_vec      = normal_lokal * -1  # nach innen drehen
+                break
 
     cog_unbekannt = False
     if cog_vec is not None and cog_vec.Length > 1e-6:
         dot_cog = cog_vec.dot(axis_local)
-        App.Console.PrintMessage(f"  dot(cog, axis_local)={dot_cog:.4f}\n")
+        App.Console.PrintMessage(f"Schritt 3: dot(cog_vec, axis_local)={dot_cog:.4f}\n")
         if dot_cog > 0:
+            # CoG und Achse gleichsinnig → Achse zeigt ins Material → umdrehen
             axis_global = App.Vector(-axis_global.x, -axis_global.y, -axis_global.z)
-            App.Console.PrintMessage(f"  axis_global umgedreht (CoG zeigt ins Material)\n")
+            App.Console.PrintMessage(f"Schritt 3: Achse umgedreht (CoG zeigt ins Material)\n")
+        else:
+            App.Console.PrintMessage(f"Schritt 3: Achse korrekt (zeigt aus Material)\n")
     else:
-        App.Console.PrintWarning(f"  Kein Zylinder/Kegel gefunden – Orientierung unbekannt, Flip-Button wird angezeigt\n")
+        App.Console.PrintWarning(f"Schritt 3: Orientierung unbekannt – Flip-Button verfügbar\n")
         cog_unbekannt = True
 
-    App.Console.PrintMessage(f"  axis_global final: {axis_global}\n")
 
     # Numerisches Rauschen entfernen: Komponenten nahe 0 oder ±1 snappen
     def snap_axis(v, tol=0.001):
@@ -575,6 +774,7 @@ def schraube_einfuegen(assembly, body, body_label,
         return r
     axis_global = snap_axis(axis_global)
 
+    App.Console.PrintMessage(f"Schritt 4: Placement im lokalen KS des Zielteils berechnen\n")
     # 4. Placement2 im lokalen KS des Ziel-Links
     try:
         target_global_pl = get_global_placement(target_link)
@@ -592,12 +792,12 @@ def schraube_einfuegen(assembly, body, body_label,
                     comps[i] = 0.0
             return App.Vector(*comps)
         axis_local = snap(axis_local)
-        App.Console.PrintMessage(f"  P2 lokal: {center_local}  axis_lokal (snap): {axis_local}\n")
         p2 = App.Placement(center_local, App.Rotation())
     except Exception as e:
         App.Console.PrintError(f"schrauben_platzierung: Placement2 Fehler: {e}\n")
         return None
 
+    App.Console.PrintMessage(f"Schritt 5: Schraube vorpositionieren\n")
     # 5. Weltposition und Rotation der Schraube
     # Body steht entlang +Z, Kopf bei Z=schrauben_laenge
     # Body-Ursprung liegt schrauben_laenge hinter dem Kopf (Kopfseite = axis_global)
@@ -617,21 +817,18 @@ def schraube_einfuegen(assembly, body, body_label,
         welt_rot = App.Rotation(body_z, axis_global)
 
     # Zufällige Rotation um Schraubenachse (Schlitz-Orientierung)
-    App.Console.PrintMessage(f"  axis_global={axis_global}  schrauben_laenge={schrauben_laenge}\n")
-    App.Console.PrintMessage(f"  Schraube Weltpos: {schraube_welt_pos}  Rot.Q: {welt_rot.Q}\n")
 
     schraube_link = link_zu_assembly(assembly, body, body_label)
     schraube_link.Placement = App.Placement(schraube_welt_pos, welt_rot)
 
-    # 6. Joint anlegen
+    App.Console.PrintMessage(f"Schritt 6: Fixed Joint anlegen\n")
     lcs_edge = lcs_attachment_edge_name(body, LCS_BOLT_NAME)
-    App.Console.PrintMessage(f"  LCS_bolt Edge: {lcs_edge}\n")
-    r1_name = target_link.Label.replace(' ', '')
-    r2_name = schraube_link.Label.replace(' ', '')
+    r1_name = schraube_link.Label.replace(' ', '')
+    r2_name = joint_ref2_link.Label.replace(' ', '')
     joint = fixed_joint_erstellen(
         assembly,
-        ref1_link=target_link,   ref1_edge_name=edge_name,
-        ref2_link=schraube_link, ref2_edge_name=lcs_edge,
+        ref1_link=schraube_link,   ref1_edge_name=lcs_edge,
+        ref2_link=joint_ref2_link, ref2_edge_name=joint_ref2_edge_name,
         label=f"Fixed_{r1_name}_{r2_name}"
     )
 
@@ -640,41 +837,31 @@ def schraube_einfuegen(assembly, body, body_label,
     actual_axis = actual_pl.Rotation.multVec(App.Vector(0, 0, 1))
     p1_local = lcs_placement_im_body(body, LCS_BOLT_NAME)
     lcs_welt = actual_pl.multVec(p1_local.Base) if p1_local else center_global
-    App.Console.PrintMessage(f"  Tatsächliche Achse: {actual_axis}  LCS_bolt Welt: {lcs_welt}\n")
 
-    # Prüfen ob LCS X-Achse ins Material zeigt (= gleiche Richtung wie cog_vec_welt)
-    # cog_vec_welt wurde oben berechnet
-    if cog_vec is not None:
-        link_pl = get_global_placement(target_link)
-        cog_vec_welt = link_pl.Rotation.multVec(cog_vec)
-        lcs_x_welt = actual_pl.Rotation.multiply(p1_local.Rotation).multVec(App.Vector(1, 0, 0))
-        dot_check = lcs_x_welt.dot(cog_vec_welt)
-        App.Console.PrintMessage(f"  LCS X-Welt: {lcs_x_welt}  dot mit CoG: {dot_check:.4f}\n")
-        if dot_check < 0:
-            flip_achse = actual_axis.cross(App.Vector(0, 1, 0))
-            if flip_achse.Length < 1e-6:
-                flip_achse = actual_axis.cross(App.Vector(1, 0, 0))
-            flip = App.Rotation(flip_achse, 180)
-            schraube_link.Placement = App.Placement(
-                schraube_link.Placement.Base,
-                flip.multiply(schraube_link.Placement.Rotation))
-            assembly.Document.recompute()
-            actual_pl = schraube_link.Placement
-            actual_axis = actual_pl.Rotation.multVec(App.Vector(0, 0, 1))
-            lcs_welt = actual_pl.multVec(p1_local.Base)
-            App.Console.PrintMessage(f"  Nach Flip: Achse={actual_axis}  LCS_bolt Welt={lcs_welt}\n")
-
-    # Zufallsdrehung um Schraubenachse über Offset2 des Joints (Schraube=Reference2)
+    # Schritt 6: Zufallsdrehung (optional)
     if zufaellig_drehen and joint is not None:
         import random as _random
         winkel = _random.choice(list(range(-90, 91, 10)))
         joint.Offset2 = App.Placement(
             App.Vector(0, 0, 0),
             App.Rotation(*[float(winkel), 0.0, 0.0]))
-        assembly.Document.recompute()
-        App.Console.PrintMessage(f"  Zufallsdrehung: {winkel}°\n")
+        joint.recompute()
 
     return joint, lcs_welt, actual_axis, schraube_link, lcs_edge, cog_unbekannt
+
+
+def get_schrauben_doc():
+    """Gibt das Schrauben-Dokument zurück, öffnet es falls nötig."""
+    import os
+    datei_name = os.path.basename(SCHRAUBEN_DATEI)
+    for doc in App.listDocuments().values():
+        if doc.FileName and os.path.basename(doc.FileName) == datei_name:
+            return doc
+    App.Console.PrintMessage(f"Öffne Schrauben-Datei: {SCHRAUBEN_DATEI}\n")
+    try:
+        return App.openDocument(SCHRAUBEN_DATEI, hidden=False)
+    except Exception as e:
+        raise RuntimeError(f"Schrauben-Datei konnte nicht geöffnet werden: {e}")
 
 
 def get_mutter_body():
@@ -691,6 +878,112 @@ def get_mutter_body():
             return None
     App.Console.PrintMessage(f"Schrauben-Datei nicht geöffnet.\n")
     return None
+
+
+def mutter_einfuegen_frei(assembly, body, body_label,
+                          auflagen_link, auflagen_face, auflagen_face_name,
+                          achse_ursprung, achse_richtung,
+                          kreis_link=None, kreis_edge_name=None,
+                          vorschau_link=None, zufaellig_drehen=False):
+    """
+    Fügt eine Mutter ein nach folgendem Algorithmus:
+    E = achse_ursprung (Gewindeende = Kreismittelpunkt)
+    M = Schnittpunkt Gewindeachse × Auflagefläche
+    LCS_nut X-Achse zeigt von M in Richtung E (ins Gewinde).
+    Offset im Joint = |E-M| entlang Achse.
+
+    WICHTIG: Die Verdrehung um die Gewindeachse (Roll) wird über
+    joint.Offset2 gesetzt, NICHT über mutter_link.Placement direkt!
+    Der Fixed-Joint-Solver berechnet Placement1 aus Reference1/Reference2
+    bei jedem recompute() neu und überschreibt dabei eine nur in Placement
+    gesetzte Rotation kommentarlos (an der Konsole verifiziert). Offset2
+    wird dagegen vom Solver respektiert und bleibt über recompute() hinweg
+    erhalten - das ist der einzige Weg, zwei Muttern auf derselben
+    Kreiskante (z.B. Kontermutter-Paar) unterschiedlich zu verdrehen.
+    Gleiches Prinzip wie die 'Zufall'-Drehung bei der Schraube
+    (siehe schraube_einfuegen, Schritt 6).
+    """
+    # Schritt 1: LCS_nut aus Mutter-Body
+    linked = body
+    while hasattr(linked, 'LinkedObject') and linked.LinkedObject:
+        linked = linked.LinkedObject
+    lcs_nut = None
+    for obj in (linked.OutList if hasattr(linked, 'OutList') else []):
+        if obj.Label == LCS_NUT_NAME or obj.Name == LCS_NUT_NAME:
+            lcs_nut = obj
+            break
+    if lcs_nut is None:
+        raise ValueError(f"'{LCS_NUT_NAME}' nicht im Mutter-Body gefunden.")
+    lcs_nut_edge = lcs_attachment_edge_name(linked, LCS_NUT_NAME)
+    if lcs_nut_edge is None:
+        raise ValueError("LCS_nut Edge nicht gefunden.")
+
+    # Schritt 2: Schnittpunkt M der Gewindeachse mit Auflagefläche
+    M = schnittpunkt_achse_flaeche(achse_ursprung, achse_richtung, auflagen_face)
+    if M is None:
+        raise ValueError("Kein Schnittpunkt der Gewindeachse mit der Auflagefläche.\nAndere Fläche wählen.")
+    App.Console.PrintMessage(f"Mutter: E={achse_ursprung}  M={M}\n")
+    App.Console.PrintMessage(f"Mutter: Auflagefläche={auflagen_face_name} bei {auflagen_link.Label}\n")
+
+    # Schritt 3: Richtungsvektor E→M und Offset
+    vec_EM = M - achse_ursprung
+    dist_EM = vec_EM.dot(achse_richtung)  # vorzeichenbehaftet entlang Achse
+    App.Console.PrintMessage(f"Mutter: |E→M| entlang Achse = {dist_EM:.3f} mm\n")
+
+    # Richtung M→E (LCS_nut X-Achse soll ins Gewinde zeigen)
+    richtung_ME = achse_richtung * -1 if dist_EM > 0 else achse_richtung
+
+    # Schritt 4: Vorpositionierung der Mutter
+    # LCS_nut X-Achse auf richtung_ME ausrichten
+    lcs_x_lokal = lcs_nut.Placement.Rotation.multVec(App.Vector(1, 0, 0))
+    welt_rot = App.Rotation(lcs_x_lokal, richtung_ME)
+
+    # Mutter so platzieren dass LCS_nut-Ursprung auf E liegt
+    lcs_ursprung_welt = welt_rot.multVec(lcs_nut.Placement.Base)
+    mutter_welt_pos   = achse_ursprung - lcs_ursprung_welt
+
+    # Link anlegen oder Vorschau wiederverwenden
+    if vorschau_link and hasattr(vorschau_link, 'Document'):
+        mutter_link = vorschau_link
+    else:
+        mutter_link = link_zu_assembly(assembly, body, body_label)
+    mutter_link.Placement = App.Placement(mutter_welt_pos, welt_rot)
+
+    # Schritt 5: Fixed Joint anlegen
+    # Reference1 = LCS_nut der Mutter
+    # Reference2 = Kreiskante am Gewindeende
+    # Offset2.Z  = dist_EM (verschiebt Mutter von E nach M)
+    if kreis_link is None or kreis_edge_name is None:
+        raise ValueError(f"Kreiskante fehlt: link={kreis_link} edge={kreis_edge_name}")
+    r1_name = mutter_link.Label.replace(' ', '')
+    r2_name = (kreis_link.Label if kreis_link else 'Ref').replace(' ', '')
+    joint = fixed_joint_erstellen(
+        assembly,
+        ref1_link=mutter_link, ref1_edge_name=lcs_nut_edge,
+        ref2_link=kreis_link,  ref2_edge_name=kreis_edge_name,
+        label=f"Fixed_{r1_name}_{r2_name}"
+    )
+
+    if joint:
+        winkel = 0.0
+        if zufaellig_drehen:
+            import random as _random
+            # Wert innerhalb EINER 60°-Periode (6-zählige Symmetrie der
+            # Sechskantmutter) -- Vielfache von 60° sehen alle identisch aus,
+            # nur Werte DAZWISCHEN erzeugen eine sichtbar andere Orientierung.
+            winkel = _random.uniform(1e-6, 60.0)
+        joint.Offset2 = App.Placement(
+            App.Vector(0, 0, dist_EM),
+            App.Rotation(winkel, 0.0, 0.0))
+        App.Console.PrintMessage(
+            f"Mutter: Offset2.Z={dist_EM:.3f} mm  Offset2-Winkel={winkel:.1f}°\n")
+        joint.recompute()
+
+    App.Console.PrintMessage(f"Mutter: finale Position={mutter_link.Placement.Base}\n")
+    App.Console.PrintMessage(f"Mutter: finale Rotation.Q={mutter_link.Placement.Rotation.Q}\n")
+
+    return joint, mutter_link
+
 
 
 def mutter_einfuegen(assembly, body, body_label,
@@ -744,7 +1037,6 @@ def mutter_einfuegen(assembly, body, body_label,
     # 5. Mutter-Ursprung positionieren
     lcs_ursprung_welt = welt_rot.multVec(p_nut.Base)
     mutter_welt_pos   = mutter_pos - lcs_ursprung_welt
-    App.Console.PrintMessage(f"  Mutter Weltpos: {mutter_welt_pos}  Rot.Q: {welt_rot.Q}\n")
 
     # 6. Vorschau-Link wiederverwenden oder neuen anlegen
     if vorschau_link and hasattr(vorschau_link, 'Document'):
@@ -756,7 +1048,6 @@ def mutter_einfuegen(assembly, body, body_label,
 
     # 7. LCS_nut-Edge für Reference1
     lcs_nut_edge = lcs_attachment_edge_name(linked, LCS_NUT_NAME)
-    App.Console.PrintMessage(f"  LCS_nut Edge: {lcs_nut_edge}\n")
 
     # 8. Fixed Joint: Mutter ↔ Schraube
     r1_name = mutter_link.Label.replace(' ', '')
@@ -774,773 +1065,607 @@ def mutter_einfuegen(assembly, body, body_label,
         joint.Offset2 = App.Placement(
             App.Vector(0, 0, offset_dist),
             App.Rotation())
-        assembly.Document.recompute()
+        joint.recompute()
         App.Console.PrintMessage(f"  Offset2.Z={offset_dist:.3f} mm\n")
 
     return joint
 
 
+
 # ---------------------------------------------------------------------------
-class SchraubenDialog(QtWidgets.QDialog):
+# Observer für Mutterauflagefläche
+# ---------------------------------------------------------------------------
+
+class _FlächeObserver:
+    """Temporärer Observer – wartet auf eine Fläche, ruft dann Callback auf und stoppt."""
+    def __init__(self, callback):
+        self._callback = callback
+        self._active   = False
+
+    def start(self):
+        if not self._active:
+            Gui.Selection.addObserver(self)
+            self._active = True
+
+    def stop(self):
+        if self._active:
+            try:
+                Gui.Selection.removeObserver(self)
+            except Exception:
+                pass
+            self._active = False
+
+    def addSelection(self, doc, obj, sub, pnt):
+        active_doc = App.ActiveDocument
+        if active_doc is None:
+            return
+        sel = Gui.Selection.getSelectionEx('', 0)
+        for s in sel:
+            for i, subname in enumerate(s.SubElementNames):
+                if i >= len(s.SubObjects):
+                    continue
+                subobj = s.SubObjects[i]
+                if subobj.ShapeType != 'Face':
+                    continue
+                parts    = subname.split('.')
+                link_obj = active_doc.getObject(parts[0].strip()) or s.Object
+                face_name = next(
+                    (p for p in reversed(parts) if p.startswith('Face')), subname
+                )
+                self.stop()
+                self._callback(link_obj, subobj, face_name)
+                return
+
+    def clearSelection(self, doc):
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Hauptdialog
+# ---------------------------------------------------------------------------
+
+class NutsAndBoltsDialog(QtWidgets.QDialog):
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Schrauben platzieren")
-        self.setWindowFlags(
-            QtCore.Qt.Window |
-            QtCore.Qt.WindowStaysOnTopHint |
-            QtCore.Qt.WindowCloseButtonHint
-        )
-        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
-        self.resize(280, 400)
+        super().__init__(parent, QtCore.Qt.Tool)
+        self.setWindowTitle("Eitech – Schrauben & Muttern")
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
 
+        # Zustand Schraube
+        self._aktiver_body     = None
+        self._aktiver_label    = None
+        self._ist_gewindestift = False
+        self._letzter_lcs_bolt_edge  = None
+        self._letzte_achse_ursprung  = None
+        self._letzte_achse_richtung  = None
+
+        # Zustand Mutter
+        self._mutter_achse_orig    = None
+        self._mutter_achse_richt   = None
+        self._mutter_link_vorschau = None
+        self._mutter_assembly      = None
+        self._mutter_kreis_link    = None
+        self._mutter_kreis_edge    = None
+        self._obs_flaeche          = None
+
+        # History für Undo
+        self._history = []
+
+        # Letzter Joint für Flip/Edit
         self._letzter_joint         = None
-        self._letzter_mutter_joint  = None
-        self._letzter_gesetzter_joint = None
         self._letzter_schraube_link = None
-        self._letzter_lcs_bolt_edge = None
-        self._letzte_achse_ursprung = None
-        self._letzte_achse_richtung = None
-        self._modus = 'schraube'  # 'schraube' | 'warte_schraube_fuer_mutter' | 'warte_flaeche'
-        self._warte_auf_flaeche = False  # Kompatibilität
-        self._warte_auf_kante   = False
-        self._gewaehlter_body   = None
-        self._gewaehlter_label  = None
-        self._observer          = None
-        self._einfuegen_aktiv   = False
-        self._einfuegen_aktiv  = False  # Re-Entrant-Schutz
 
         self._build_ui()
-        self._start_observer()
-        self._schrauben_doc_laden()
 
-    def _schrauben_doc_laden(self):
-        """Stellt sicher dass die Schrauben-Datei vollständig geladen ist."""
-        import os
-        schrauben_doc = None
-        datei_name = os.path.basename(SCHRAUBEN_DATEI)
-        bereits_offen = False
-        for d in App.listDocuments().values():
-            if d.FileName and os.path.basename(d.FileName) == datei_name:
-                schrauben_doc = d
-                bereits_offen = True
-                break
-        if schrauben_doc is None:
-            try:
-                App.Console.PrintMessage(f"schrauben_platzierung: Lade {SCHRAUBEN_DATEI}\n")
-                schrauben_doc = App.openDocument(SCHRAUBEN_DATEI, hidden=False)
-            except Exception as e:
-                self._set_status(f"Fehler: Schrauben-Datei nicht gefunden.\n{e}", error=True)
-                return
-        # recompute nur beim erstmaligen Laden nötig
-        if not bereits_offen:
-            schrauben_doc.recompute()
-        # Ersten Button optisch markieren, Body direkt setzen ohne openDocument
-        if self._schrauben_btns:
-            self._schrauben_btns[0].setChecked(True)
-            self._highlight_active_btn(self._schrauben_btns[0])
-            first_label = self._schrauben_btns[0].property("body_label")
-            self._gewaehlter_label = first_label
-            self._set_status(f"{first_label} gewählt.\nLochrand anklicken …")
-
-    # --- UI aufbauen --------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # UI
+    # -----------------------------------------------------------------------
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(4)
+        layout.setContentsMargins(6, 6, 6, 6)
 
-        # Schrauben-Knöpfe
-        layout.addWidget(QtWidgets.QLabel("Schraube wählen:"))
-        self._btn_gruppe = QtWidgets.QButtonGroup(self)
-        self._btn_gruppe.setExclusive(True)
+        # --- Alle Buttons in einer Reihe ---
+        row_btns = QtWidgets.QHBoxLayout()
+        row_btns.setSpacing(2)
+        self._schraube_btns = []
 
-        self._schrauben_btns = []
-        first_btn = None
-        for label, body_name in SCHRAUBEN_BODIES.items():
-            btn = QtWidgets.QPushButton(label)
+        for label, body_name, icon_name, ist_gewindestift in SCHRAUBEN:
+            btn = QtWidgets.QPushButton()
+            btn.setIcon(_icon(icon_name))
+            btn.setIconSize(QtCore.QSize(44, 44))
+            btn.setFixedSize(30, 54)
+            btn.setToolTip(label)
             btn.setCheckable(True)
-            btn.setToolTip("Klicke einen Lochrand an")
-            btn.setProperty("body_name",  body_name)
-            btn.setProperty("body_label", label)
-            self._btn_gruppe.addButton(btn)
-            self._schrauben_btns.append(btn)
-            layout.addWidget(btn)
-            btn.clicked.connect(self._on_schraube_gewaehlt)
-            if first_btn is None:
-                first_btn = btn
+            btn.setStyleSheet(
+                "QPushButton { padding: 0px; border: 1px solid #aaa; background: white; }"
+                "QPushButton:checked { border: 2px solid #0066cc; background: #ddeeff; }"
+            )
+            btn.clicked.connect(lambda checked, l=label, b=body_name, g=ist_gewindestift:
+                                self._on_schraube_btn(l, b, g))
+            self._schraube_btns.append(btn)
+            row_btns.addWidget(btn)
 
-        # Ersten Button direkt auswählen (emit nach doc-laden in _schrauben_doc_laden)
-        if first_btn is not None:
-            first_btn.setChecked(True)
+        sep = QtWidgets.QFrame()
+        sep.setFrameShape(QtWidgets.QFrame.VLine)
+        sep.setFrameShadow(QtWidgets.QFrame.Sunken)
+        row_btns.addWidget(sep)
 
-        # Mutter zu bestehender Schraube (kein extra Abstand)
-        self._btn_mutter_zu_schraube = QtWidgets.QPushButton("Mutter")
-        self._btn_mutter_zu_schraube.setToolTip("Klicke eine Schraube an und dann eine Fläche")
-        self._btn_mutter_zu_schraube.setCheckable(True)
-        self._btn_mutter_zu_schraube.setProperty("body_name",  None)
-        self._btn_mutter_zu_schraube.setProperty("body_label", None)
-        self._btn_gruppe.addButton(self._btn_mutter_zu_schraube)
-        self._btn_mutter_zu_schraube.clicked.connect(self._on_mutter_zu_schraube)
-        layout.addWidget(self._btn_mutter_zu_schraube)
+        self._btn_mutter = QtWidgets.QPushButton()
+        self._btn_mutter.setIcon(_icon("Mutter"))
+        self._btn_mutter.setIconSize(QtCore.QSize(44, 44))
+        self._btn_mutter.setFixedSize(30, 54)
+        self._btn_mutter.setToolTip(
+            "Mutter einfügen\n"
+            "Schritt 1: Kreisfläche markieren, dann klicken\n"
+            "Schritt 2: Auflagefläche markieren, dann klicken"
+        )
+        self._btn_mutter.setCheckable(True)
+        self._btn_mutter.setStyleSheet(
+            "QPushButton { padding: 0px; border: 1px solid #aaa; background: white; }"
+            "QPushButton:checked { border: 2px solid #0066cc; background: #ddeeff; }"
+        )
+        self._btn_mutter.clicked.connect(self._on_mutter_btn)
+        row_btns.addWidget(self._btn_mutter)
+        row_btns.addStretch()
+        layout.addLayout(row_btns)
 
-        layout.addSpacing(8)
+        # --- Zweite Reihe: Optionen + Aktions-Buttons ---
+        row2 = QtWidgets.QHBoxLayout()
+        row2.setSpacing(3)
 
-        # Optionen
-        self._cb_zufall = QtWidgets.QCheckBox("Zufällig drehen")
+        self._cb_zufall = QtWidgets.QCheckBox("Zufall")
+        self._cb_zufall.setToolTip("Zufällig drehen")
         self._cb_zufall.setChecked(True)
-        layout.addWidget(self._cb_zufall)
+        row2.addWidget(self._cb_zufall)
 
-        self._cb_mutter = QtWidgets.QCheckBox("Mutter automatisch einfügen")
-        self._cb_mutter.stateChanged.connect(self._on_mutter_checkbox)
-        layout.addWidget(self._cb_mutter)
+        row2.addStretch()
 
-        layout.addSpacing(8)
-
-        # Flip-Button (nur sichtbar wenn Orientierung unbekannt)
-        self._btn_flip = QtWidgets.QPushButton("⟳ Flip (Orientierung umkehren)")
-        self._btn_flip.setToolTip("Schraube um 180° drehen wenn sie falsch herum sitzt")
-        self._btn_flip.setVisible(False)
+        self._btn_flip = QtWidgets.QPushButton("↕")
+        self._btn_flip.setToolTip("Letzte Schraube um 180° flippen")
+        self._btn_flip.setFixedSize(28, 28)
+        self._btn_flip.setEnabled(False)
         self._btn_flip.clicked.connect(self._on_flip)
-        layout.addWidget(self._btn_flip)
+        row2.addWidget(self._btn_flip)
 
-        # Edit Constraint Button
-        self._btn_edit_constraint = QtWidgets.QPushButton("Edit Constraint")
-        self._btn_edit_constraint.setToolTip("Öffnet den FreeCAD Joint-Dialog für die zuletzt erzeugte Verbindung")
-        self._btn_edit_constraint.setEnabled(False)
-        self._btn_edit_constraint.clicked.connect(self._on_edit_constraint)
-        layout.addWidget(self._btn_edit_constraint)
+        self._btn_edit = QtWidgets.QPushButton("✎")
+        self._btn_edit.setToolTip("Letzten Joint editieren")
+        self._btn_edit.setFixedSize(28, 28)
+        self._btn_edit.setEnabled(False)
+        self._btn_edit.clicked.connect(self._on_edit)
+        row2.addWidget(self._btn_edit)
 
-        layout.addStretch()
+        self._btn_undo = QtWidgets.QPushButton("↩")
+        self._btn_undo.setToolTip("Letzte Einfügung rückgängig")
+        self._btn_undo.setFixedSize(28, 28)
+        self._btn_undo.setEnabled(False)
+        self._btn_undo.clicked.connect(self._on_undo)
+        row2.addWidget(self._btn_undo)
 
-        # Statuszeile
-        self._status = QtWidgets.QLabel("Schraube wählen, dann Lochrand anklicken.")
+        layout.addLayout(row2)
+
+        # --- Statuszeile ---
+        self._status = QtWidgets.QLabel(
+            "Kreiskante markieren,\ndann Schraube oder Mutter\nButton drücken."
+        )
         self._status.setWordWrap(True)
-        self._status.setStyleSheet("color: #555; font-style: italic;")
+        self._status.setStyleSheet("color: #555; font-style: italic; font-size: 10px;")
+        self._status.setFixedWidth(200)
+        self._status.setMinimumHeight(28)
         layout.addWidget(self._status)
 
-    # --- SelectionObserver --------------------------------------------------
+        self.adjustSize()
 
-    def _start_observer(self):
-        dialog = self
-        assembly_doc_name = None
-        asm = get_active_assembly()
-        if asm:
-            assembly_doc_name = asm.Document.Name
+    # -----------------------------------------------------------------------
+    # Hilfsmethoden Selektion
+    # -----------------------------------------------------------------------
 
-        class Observer:
-            def addSelection(self, doc, obj, sub, pnt):
-                # Bei verschachtelten Assemblies kommen mehrere Events –
-                # wir verzögern und nehmen beim Callback den besten
-                QtCore.QTimer.singleShot(
-                    200,
-                    lambda: dialog._on_selection_delayed(doc, obj, sub, pnt)
-                )
-
-        self._observer = Observer()
-        Gui.Selection.addObserver(self._observer)
-        _register_observer(self._observer)
-
-    def _stop_observer(self):
-        if self._observer:
-            Gui.Selection.removeObserver(self._observer)
-            _unregister_observer(self._observer)
-            self._observer = None
-
-    def closeEvent(self, event):
-        self._stop_observer()
-        super().closeEvent(event)
-
-    # --- Selektion verarbeiten ----------------------------------------------
-
-    def _on_selection_delayed(self, doc, obj_name, sub, pnt):
-        """Verzögert aufgerufen – holt sub mit vollem Pfad über resolve=0."""
-        real_sub = sub
-        real_axis = None
-        real_center = None
+    def _get_selektierte_kreiskante(self):
+        """Gibt (link, edge, edge_name) zurück wenn Kreiskante selektiert."""
         try:
             sel = Gui.Selection.getSelectionEx('', 0)
             for s in sel:
-                if not s.SubElementNames:
-                    continue
-                full = s.SubElementNames[0]
-                clean = full.split(';')[0]  # z.B. 'Fahrgestell.Platte_3_x_5.Pad002.Edge42'
-                if '.' in clean:
-                    real_sub = clean + sub if not clean.endswith(sub) else clean.rstrip('.')
-                    # Edge-Name aus original sub anhängen wenn nicht schon drin
-                    if sub and not real_sub.endswith(sub):
-                        real_sub = clean + sub
-                    if s.SubObjects:
-                        e = s.SubObjects[0]
-                        if hasattr(e, 'Curve') and hasattr(e.Curve, 'Axis'):
-                            real_axis   = e.Curve.Axis
-                            real_center = e.Curve.Center
-                    App.Console.PrintMessage(f"  sub resolved: '{sub}' → '{real_sub}'\n")
-                    if real_axis:
-                        App.Console.PrintMessage(f"  Kreisachse (resolve=0): {real_axis}\n")
-                    break
+                for i, subname in enumerate(s.SubElementNames):
+                    if i >= len(s.SubObjects):
+                        continue
+                    subobj = s.SubObjects[i]
+                    if hasattr(subobj, 'Curve') and isinstance(subobj.Curve, Part.Circle):
+                        link_name = subname.split('.')[0].strip()
+                        link = App.ActiveDocument.getObject(link_name) or s.Object
+                        return link, subobj, subname
         except Exception as e:
-            App.Console.PrintMessage(f"  resolve Fehler: {e}\n")
-        self._on_selection(doc, obj_name, real_sub, pnt, real_axis, real_center)
+            App.Console.PrintWarning(f"Selektion Kreiskante: {e}\n")
+        return None
 
-    def _on_selection(self, doc, obj_name, sub, pnt, real_axis=None, real_center=None):
-        """Wird bei jeder Selektion aufgerufen."""
-        if self._gewaehlter_body is None:
-            return
-        if self._einfuegen_aktiv:
-            return
-
-        # Modus: auf Schraube warten für Mutter
-        if self._modus == 'warte_schraube_fuer_mutter':
-            # Wenn ein Lochrand angeklickt wird → Schraube einfügen (Mutter folgt automatisch)
-            result = get_selected_circular_edge()
-            if result is not None:
-                self._modus = 'schraube'  # zurücksetzen damit normale Verarbeitung greift
-            else:
-                self._on_schraube_fuer_mutter_angeklickt(obj_name, sub, pnt)
-                return
-
-        # Modus: auf Fläche warten für Mutter-Positionierung
-        if self._modus == 'warte_flaeche':
-            # Nur Flächen akzeptieren (Face), keine Kanten (Edge)
-            sub_element = sub.split('.')[-1] if sub and '.' in sub else sub
-            if sub_element and sub_element.startswith('Face'):
-                self._on_flaeche_fuer_mutter_angeklickt(obj_name, sub, pnt)
-            else:
-                self._set_status("Bitte eine Fläche anklicken (kein Lochrand).", error=True)
-            return
-
-        # Modus: Schraube einfügen – auf Kreiskante warten
-        result = get_selected_circular_edge()
-        if result is None:
-            if self._gewaehlter_body is not None:
-                self._set_status(
-                    f"{self._gewaehlter_label} gewählt.\n"
-                    "Bitte einen Lochrand (Kreiskante) anklicken.")
-            return
-
-        raw_obj, edge, edge_name = result
-        App.Console.PrintMessage(f"Selection: doc={doc} obj={obj_name} sub={sub} TypeId={getattr(raw_obj,'TypeId','?')}\n")
-        App.Console.PrintMessage(f"  Klickpunkt: {pnt}\n")
+    def _get_selektierte_kreisflaeche(self):
+        """Gibt (link, face, full_subname) zurück wenn planare Kreisfläche selektiert."""
         try:
-            App.Console.PrintMessage(f"  Edge.Curve.Center={edge.Curve.Center}  Edge.Curve.Axis={edge.Curve.Axis}\n")
-        except Exception:
-            pass
+            sel = Gui.Selection.getSelectionEx('', 0)
+            for s in sel:
+                for i, subname in enumerate(s.SubElementNames):
+                    if i >= len(s.SubObjects):
+                        continue
+                    subobj = s.SubObjects[i]
+                    if subobj.ShapeType != 'Face':
+                        continue
+                    edges = subobj.Edges
+                    if len(edges) != 1:
+                        continue
+                    if not isinstance(edges[0].Curve, Part.Circle):
+                        continue
+                    if not isinstance(subobj.Surface, Part.Plane):
+                        continue
+                    link_name = subname.split('.')[0].strip()
+                    link = App.ActiveDocument.getObject(link_name) or s.Object
+                    return link, subobj, subname  # vollständiger SubElementName
+        except Exception as e:
+            App.Console.PrintWarning(f"Selektion Kreisfläche: {e}\n")
+        return None
+
+    def _get_selektierte_flaeche(self):
+        """Gibt (link, face, face_name) zurück wenn irgendeine Fläche selektiert."""
+        try:
+            sel = Gui.Selection.getSelectionEx('', 0)
+            for s in sel:
+                for i, subname in enumerate(s.SubElementNames):
+                    if i >= len(s.SubObjects):
+                        continue
+                    subobj = s.SubObjects[i]
+                    if subobj.ShapeType == 'Face':
+                        link_name = subname.split('.')[0].strip()
+                        link = App.ActiveDocument.getObject(link_name) or s.Object
+                        face_name = subname.split('.')[-1]
+                        return link, subobj, face_name
+        except Exception as e:
+            App.Console.PrintWarning(f"Selektion Fläche: {e}\n")
+        return None
+
+    # -----------------------------------------------------------------------
+    # Button-Handler: Schraube
+    # -----------------------------------------------------------------------
+
+    def _on_schraube_btn(self, label, body_name, ist_gewindestift):
+        # Alle anderen Buttons deaktivieren
+        for btn in self._schraube_btns:
+            if btn.toolTip() != label:
+                btn.setChecked(False)
+        self._btn_mutter.setChecked(False)
+        self._mutter_schritt = 0
+
+        # Body laden
+        self._set_status(f"Lade {label} …")
+        try:
+            doc = get_schrauben_doc()
+        except Exception as e:
+            self._set_status(f"Schrauben-Datei nicht gefunden: {e}", error=True)
+            return
+
+        body = doc.getObject(body_name)
+        if body is None:
+            self._set_status(f"Body '{body_name}' nicht gefunden.", error=True)
+            return
+
+        self._aktiver_body     = body
+        self._aktiver_label    = label
+        self._ist_gewindestift = ist_gewindestift
+
+        # Assembly prüfen
+        assembly = get_active_assembly()
+        if assembly is None:
+            self._set_status("Kein aktives Assembly.", error=True)
+            for btn in self._schraube_btns:
+                if btn.toolTip() == label:
+                    btn.setChecked(False)
+            return
+
+        # Aktuelle Selektion prüfen
+        kreiskante = self._get_selektierte_kreiskante()
+        if kreiskante is None:
+            self._set_status(f"{label}: keine Kreiskante selektiert.", error=True)
+            # Button wieder deaktivieren
+            for btn in self._schraube_btns:
+                if btn.toolTip() == label:
+                    btn.setChecked(False)
+            return
+
+        link, edge, edge_name = kreiskante
+        self._set_status(f"Füge {label} ein …")
+        self._schraube_einfuegen(assembly, link, edge, edge_name)
+
+        # Button deaktivieren nach Einfügen
+        for btn in self._schraube_btns:
+            if btn.toolTip() == label:
+                btn.setChecked(False)
+
+    # -----------------------------------------------------------------------
+    # Button-Handler: Mutter (zweistufig)
+    # -----------------------------------------------------------------------
+
+    def _on_mutter_btn(self):
+        # Schrauben-Buttons deaktivieren
+        for btn in self._schraube_btns:
+            btn.setChecked(False)
+
+        # Kreiskante oder Kreisfläche aus aktueller Selektion lesen
+        kreiskante = self._get_selektierte_kreiskante()
+        if kreiskante is None:
+            kreisflaeche = self._get_selektierte_kreisflaeche()
+            if kreisflaeche is not None:
+                link, face, subname = kreisflaeche
+                kante = face.Edges[0]
+                # Vollständigen SubElementName behalten – FreeCAD löst Fläche→Kante auf
+                kreiskante = (link, kante, subname)
+
+        if kreiskante is None:
+            self._set_status("Kreiskante oder Kreisfläche markieren, dann Mutter-Button drücken.", error=True)
+            self._btn_mutter.setChecked(False)
+            return
 
         assembly = get_active_assembly()
         if assembly is None:
-            self._set_status("Kein aktives Assembly gefunden.", error=True)
-            return
-
-        # Link-Name = erster Teil des sub-Strings
-        link_obj = None
-        joint_edge_name = edge_name
-        if sub and '.' in sub:
-            parts = sub.split('.')
-            link_name = parts[0]
-            candidate = assembly.Document.getObject(link_name)
-            if candidate and candidate.TypeId in ("App::Link", "Assembly::AssemblyLink"):
-                link_obj = candidate
-                joint_edge_name = '.'.join(parts[1:]) if len(parts) > 1 else edge_name
-                App.Console.PrintMessage(f"  → Link: {link_obj.Name} / {link_obj.Label}  joint_edge='{joint_edge_name}'\n")
-            else:
-                self._set_status(
-                    f"'{link_name}' ist kein direktes Bauteil der aktiven Assembly.\n"
-                    "Bitte zuerst die Assembly aktivieren, die dieses Teil enthält.",
-                    error=True)
-                return
-
-        if link_obj is None:
-            App.Console.PrintMessage(f"  → sub='{sub}' ohne Präfix, suche per Klickpunkt\n")
-            click_pos = App.Vector(pnt[0], pnt[1], pnt[2]) if pnt else None
-            link_obj = find_link_in_assembly(assembly, raw_obj, click_pos)
-            if link_obj:
-                App.Console.PrintMessage(f"  → Link per Fallback: {link_obj.Name} / {link_obj.Label}\n")
-
-        if link_obj is None:
-            self._set_status(
-                "Bauteil nicht erkannt.\nBitte Lochrand nochmal anklicken.",
-                error=True)
-            return
-
-        click_pos = App.Vector(pnt[0], pnt[1], pnt[2]) if pnt else None
-        self._schraube_einfuegen_jetzt(link_obj, edge, joint_edge_name, raw_obj, click_pos, real_axis, real_center)
-
-    def _on_schraube_fuer_mutter_angeklickt(self, obj_name, sub, pnt):
-        """Im Modus 'warte_schraube_fuer_mutter': prüft ob eine Schraube angeklickt wurde."""
-        assembly = get_active_assembly()
-        if assembly is None:
-            return
-        # Link-Name aus sub
-        if not (sub and '.' in sub):
-            return
-        link_name = sub.split('.')[0]
-        link_obj = assembly.Document.getObject(link_name)
-        if link_obj is None:
-            return
-        # Prüfen ob der Link auf einen Schrauben-Body zeigt (hat LCS_bolt)
-        linked = link_obj.LinkedObject if hasattr(link_obj, 'LinkedObject') else None
-        while linked and hasattr(linked, 'LinkedObject') and linked.LinkedObject:
-            linked = linked.LinkedObject
-        if linked is None:
-            return
-        # Schraube erkennen: hat LCS_bolt UND ist in Schrauben-Dokument
-        hat_lcs_bolt = any(
-            obj.Label == LCS_BOLT_NAME or obj.Name == LCS_BOLT_NAME
-            for obj in (linked.OutList if hasattr(linked, 'OutList') else [])
-        )
-        if not hat_lcs_bolt:
-            self._set_status("Bitte eine Schraube anklicken.", error=True)
-            return
-
-        App.Console.PrintMessage(f"Schraube für Mutter: {link_obj.Name}\n")
-
-        # Achse aus Schraube rekonstruieren
-        lcs_edge = lcs_attachment_edge_name(linked, LCS_BOLT_NAME)
-        p1 = lcs_placement_im_body(linked, LCS_BOLT_NAME)
-        if p1 is None:
-            self._set_status("LCS_bolt nicht gefunden.", error=True)
-            return
-
-        # Weltposition und Achse wie beim normalen Workflow:
-        # actual_axis = Body-Z in Weltkoordinaten (zeigt aus dem Material)
-        link_pl = link_obj.Placement
-        actual_axis = link_pl.Rotation.multVec(App.Vector(0, 0, 1))
-        lcs_ursprung = link_pl.multVec(p1.Base)
-
-        self._letzter_schraube_link = link_obj
-        self._letzter_lcs_bolt_edge = lcs_edge
-        self._letzte_achse_ursprung = lcs_ursprung
-        self._letzte_achse_richtung = actual_axis
-
-        App.Console.PrintMessage(
-            f"Mutter zu Schraube: {link_obj.Label}\n"
-            f"  LCS Ursprung Welt: {lcs_ursprung}\n"
-            f"  Achse Welt (actual_axis): {actual_axis}\n")
-
-        self._mutter_vorschau()
-
-    def _on_flaeche_fuer_mutter_angeklickt(self, obj_name, sub, pnt):
-        """Im Modus 'warte_flaeche': Fläche auswerten und Mutter endgültig platzieren."""
-        assembly = get_active_assembly()
-        if assembly is None:
-            return
-
-        # Fläche direkt aus getSelectionEx holen (noch aktiv im delayed callback)
-        face = None
-        face_name = None
-        target_link = None
-
-        sel = Gui.Selection.getSelectionEx('', 0)
-        for s in sel:
-            for sn, so in zip(s.SubElementNames, s.SubObjects):
-                clean = sn.split(';')[0]
-                if isinstance(so, Part.Face):
-                    face = so
-                    # face_name = letzter Teil des sub-Pfads
-                    clean_sub = sub.split(';')[0] if sub else sn
-                    face_name = clean_sub.split('.')[-1] if '.' in clean_sub else sn
-                    # Link aus sub bestimmen
-                    if '.' in clean_sub:
-                        link_name = clean_sub.split('.')[0]
-                        target_link = assembly.Document.getObject(link_name)
-                    break
-            if face:
-                break
-
-        # Fallback: aus sub-Parameter
-        if face is None and sub and '.' in sub:
-            link_name = sub.split('.')[0]
-            target_link = assembly.Document.getObject(link_name)
-            face_name = sub.split('.')[-1]
-            App.Console.PrintMessage(f"  Fläche-Fallback: link={link_name} face={face_name}\n")
-
-        if target_link is None:
-            self._set_status("Bitte eine Fläche anklicken.", error=True)
-            return
-
-        # Joints und Assembly-Objekte nicht als Fläche akzeptieren
-        if target_link.TypeId in ('Assembly::JointGroup', 'App::DocumentObjectGroup'):
-            self._set_status("Bitte eine Bauteilfläche anklicken, nicht einen Joint.", error=True)
-            return
-
-        App.Console.PrintMessage(f"  Fläche erkannt: {face_name} auf {target_link.Name}\n")
-
-        # Vorschau-Link sichern bevor er auf None gesetzt wird
-        self._mutter_vorschau_link_gesichert = getattr(self, '_mutter_vorschau_link', None)
-        self._mutter_vorschau_link = None  # nicht entfernen, wird wiederverwendet
-        # Modus zurücksetzen: bei "Mutter zu Schraube" wieder auf warte_schraube
-        naechster_modus = 'warte_schraube_fuer_mutter' if getattr(self, '_mutter_zu_schraube_aktiv', False) else 'schraube'
-        self._modus = naechster_modus
-        self._mutter_einfuegen_jetzt(target_link, face, face_name)
-
-    MUTTER_VORSCHAU_ABSTAND = 2.0  # mm Abstand vom Schraubenende
-
-    def _mutter_vorschau(self):
-        """Platziert die Mutter als Vorschau am Schraubenende + 2mm Abstand."""
-        if self._letzte_achse_ursprung is None:
+            self._set_status("Kein aktives Assembly.", error=True)
+            self._btn_mutter.setChecked(False)
             return
 
         mutter_body = get_mutter_body()
         if mutter_body is None:
-            self._set_status(f"Mutter-Body '{MUTTER_LABEL}' nicht gefunden.", error=True)
-            self._modus = 'schraube'
+            self._set_status("Mutter-Body nicht gefunden.", error=True)
+            self._btn_mutter.setChecked(False)
             return
 
-        assembly = get_active_assembly()
-        if assembly is None:
-            return
+        link, edge, edge_name = kreiskante
 
-        # Schraubenlänge aus LCS_bolt
-        p1 = lcs_placement_im_body(
-            self._letzter_schraube_link.LinkedObject if hasattr(self._letzter_schraube_link, 'LinkedObject')
-            else self._letzter_schraube_link,
-            LCS_BOLT_NAME)
-        schrauben_laenge = p1.Base.z if p1 else 6.0
-
-        # Vorschau-Position: am Schraubenende (Spitzenseite) + Abstand
-        # axis_global zeigt vom Loch weg (Kopfseite) → Spitze ist -axis_global
-        achse = self._letzte_achse_richtung
-        vorschau_pos = (self._letzte_achse_ursprung
-                        - App.Vector(achse.x, achse.y, achse.z) * (schrauben_laenge + self.MUTTER_VORSCHAU_ABSTAND))
-
-        # Rotation wie Schraube
-        body_z = App.Vector(0, 0, 1)
-        if abs(body_z.dot(achse) - 1.0) < 1e-6:
-            welt_rot = App.Rotation()
-        elif abs(body_z.dot(achse) + 1.0) < 1e-6:
-            welt_rot = App.Rotation(App.Vector(1, 0, 0), 180)
-        else:
-            welt_rot = App.Rotation(body_z, achse)
-
-        # LCS_nut Offset
-        linked = mutter_body
-        while hasattr(linked, 'LinkedObject') and linked.LinkedObject:
-            linked = linked.LinkedObject
-        p_nut = None
-        for obj in (linked.OutList if hasattr(linked, 'OutList') else []):
-            if obj.Label == LCS_NUT_NAME or obj.Name == LCS_NUT_NAME:
-                p_nut = obj.Placement
-                break
-        if p_nut:
-            lcs_ursprung_welt = welt_rot.multVec(p_nut.Base)
-            vorschau_pos = vorschau_pos - lcs_ursprung_welt
-
+        # Achse direkt aus Kreiskante
+        self._mutter_achse_orig  = edge.Curve.Center
+        self._mutter_achse_richt = edge.Curve.Axis
+        self._mutter_achse_richt.normalize()
+        self._mutter_assembly    = assembly
         App.Console.PrintMessage(
-            f"  Vorschau: pos={vorschau_pos}  achse={achse}  laenge={schrauben_laenge}\n")
+            f"Mutter: Gewindeende E={self._mutter_achse_orig}  "
+            f"Achse={self._mutter_achse_richt}\n"
+        )
 
-        # Vorschau-Link anlegen (kein Joint)
-        mutter_link = link_zu_assembly(assembly, mutter_body, MUTTER_LABEL)
-        mutter_link.Placement = App.Placement(vorschau_pos, welt_rot)
-        self._mutter_vorschau_link = mutter_link
-
-        self._modus = 'warte_flaeche'
-        self._set_status("Mutter-Vorschau gesetzt.\nBitte Fläche für Mutter anklicken …")
-
-    def _mutter_vorschau_entfernen(self):
-        """Entfernt die Vorschau-Mutter ohne Joint."""
-        if hasattr(self, '_mutter_vorschau_link') and self._mutter_vorschau_link:
-            try:
-                obj = self._mutter_vorschau_link
-                # Nur entfernen wenn kein Joint darauf zeigt
-                if not obj.InList:
-                    doc = obj.Document
-                    doc.removeObject(obj.Name)
-                    doc.recompute()
-                else:
-                    App.Console.PrintMessage(f"  Vorschau-Mutter hat InList – nicht entfernt\n")
-            except Exception as e:
-                App.Console.PrintMessage(f"  Vorschau entfernen Fehler: {e}\n")
-            self._mutter_vorschau_link = None
-
-    def _on_edit_constraint(self):
-        """Öffnet den FreeCAD Joint-Dialog für die zuletzt erzeugte Verbindung."""
-        # _letzter_gesetzter_joint ist der zuletzt gesetzte Joint (Schraube oder Mutter)
-        joint = getattr(self, '_letzter_gesetzter_joint', None)
-        if joint is None:
-            return
-        try:
-            if hasattr(self, '_observer'):
-                Gui.Selection.removeObserver(self._observer)
-            joint.ViewObject.doubleClicked()
-        except Exception as e:
-            App.Console.PrintWarning(f"Edit Constraint fehlgeschlagen: {e}\n")
-        finally:
-            if hasattr(self, '_observer'):
-                Gui.Selection.addObserver(self._observer)
-
-    def _on_flip(self):
-        """Dreht die zuletzt eingefügte Schraube um 180°."""
-        if self._letzter_schraube_link is None:
-            return
-        link = self._letzter_schraube_link
-        actual_axis = link.Placement.Rotation.multVec(App.Vector(0, 0, 1))
-        flip_achse = actual_axis.cross(App.Vector(0, 1, 0))
-        if flip_achse.Length < 1e-6:
-            flip_achse = actual_axis.cross(App.Vector(1, 0, 0))
-        flip = App.Rotation(flip_achse, 180)
-        link.Placement = App.Placement(
-            link.Placement.Base,
-            flip.multiply(link.Placement.Rotation))
-        link.Document.recompute()
-        # Achse aktualisieren
-        self._letzte_achse_richtung = link.Placement.Rotation.multVec(App.Vector(0, 0, 1))
-        self._set_status("Flip ausgeführt. Mutter einfügen oder erneut flippen.")
-        App.Console.PrintMessage("  Flip ausgeführt\n")
-
-    def _on_mutter_zu_schraube(self):
-        """Startet den Mutter-Workflow für eine bereits eingefügte Schraube."""
-        # Button-Gruppe deselektiert Schrauben-Buttons automatisch
-        self._modus = 'warte_schraube_fuer_mutter'
-        self._mutter_zu_schraube_aktiv = True
-        self._btn_mutter_zu_schraube.setChecked(True)
-        self._btn_mutter_zu_schraube.setStyleSheet(
-            "QPushButton { background-color: #0066cc; color: white; "
-            "font-weight: bold; border: 2px solid #004499; padding: 4px; }")
-        self._set_status("Schraube anklicken …")
-
-    def _on_mutter_checkbox(self, state):
-        if state == 2:  # Checked
-            if self._letzter_schraube_link is None:
-                self._modus = 'warte_schraube_fuer_mutter'
-                self._set_status("Bitte eine bereits gesetzte Schraube anklicken …")
-            elif self._letzte_achse_ursprung is not None:
-                self._mutter_vorschau()
-        else:
-            self._mutter_vorschau_entfernen()
-            self._modus = 'schraube'
-            if self._gewaehlter_label:
-                self._set_status(f"{self._gewaehlter_label} gewählt.\nLochrand anklicken …")
-
-    def _on_schraube_gewaehlt(self):
-        btn = self._btn_gruppe.checkedButton()
-        if btn is None:
-            return
-        body_name  = btn.property("body_name")
-        body_label = btn.property("body_label")
-
-        # Mutter-zu-Schraube Button wurde über die Gruppe deselektiert → Modus zurücksetzen
-        if body_name is None:
-            return
-
-        self._highlight_active_btn(btn)
-        self._mutter_zu_schraube_aktiv = False
-        if hasattr(self, '_btn_mutter_zu_schraube'):
-            self._btn_mutter_zu_schraube.setStyleSheet("")
-        if hasattr(self, '_btn_flip'):
-            self._btn_flip.setVisible(False)
-
-        # Mutter-Checkbox für Gewindestift deaktivieren
-        ist_gewindestift = (body_label == "Gewindestift")
-        self._cb_mutter.setEnabled(not ist_gewindestift)
-        if ist_gewindestift:
-            self._cb_mutter.setChecked(False)
-
-        # Body aus Schrauben-Dokument holen (muss geöffnet sein)
-        schrauben_doc = None
-        import os
-        datei_name = os.path.basename(SCHRAUBEN_DATEI)
-        for d in App.listDocuments().values():
-            if not d.FileName:
-                continue
-            if os.path.basename(d.FileName) == datei_name:
-                schrauben_doc = d
+        # kreis_link und kreis_edge_name aus der Selektion
+        sel = Gui.Selection.getSelectionEx('', 0)
+        self._mutter_kreis_link  = link  # kommt aus _get_selektierte_kreiskante/-flaeche
+        self._mutter_kreis_edge  = edge_name
+        for s in sel:
+            for i, subname in enumerate(s.SubElementNames):
+                if i >= len(s.SubObjects):
+                    continue
+                subobj = s.SubObjects[i]
+                # Kreiskante direkt selektiert
+                if hasattr(subobj, 'Curve') and isinstance(subobj.Curve, Part.Circle):
+                    link_name = subname.split('.')[0].strip()
+                    self._mutter_kreis_link = App.ActiveDocument.getObject(link_name) or s.Object
+                    self._mutter_kreis_edge = subname
+                    break
+                # Kreisfläche selektiert
+                if (subobj.ShapeType == 'Face' and len(subobj.Edges) == 1
+                        and isinstance(subobj.Edges[0].Curve, Part.Circle)):
+                    link_name = subname.split('.')[0].strip()
+                    self._mutter_kreis_link = App.ActiveDocument.getObject(link_name) or s.Object
+                    self._mutter_kreis_edge = subname
+                    break
+            if self._mutter_kreis_link is not link:
                 break
+        App.Console.PrintMessage(
+            f"  Kreiskante: {self._mutter_kreis_edge}  "
+            f"Link: {self._mutter_kreis_link.Label}\n"
+        )
 
-        if schrauben_doc is None:
-            # Versuchen zu öffnen (hidden=False = vollständig laden)
-            try:
-                schrauben_doc = App.openDocument(SCHRAUBEN_DATEI, hidden=False)
-            except Exception as e:
-                self._set_status(f"Fehler: Schrauben-Datei nicht gefunden.\n{e}", error=True)
+        # Mutter vorpositionieren (ohne Joint): LCS_nut-Ursprung auf E
+        try:
+            rot = App.Rotation(App.Vector(0, 0, 1), self._mutter_achse_richt)
+        except Exception:
+            rot = App.Rotation()
+        self._mutter_link_vorschau = link_zu_assembly(assembly, mutter_body, MUTTER_LABEL)
+        self._mutter_link_vorschau.Placement = App.Placement(self._mutter_achse_orig, rot)
+        App.Console.PrintMessage(
+            f"Mutter: Vorposition={self._mutter_link_vorschau.Placement.Base}\n"
+        )
+
+        # Observer für Auflagefläche starten
+        self._obs_flaeche = _FlächeObserver(self._on_auflagenflaeche)
+        self._obs_flaeche.start()
+        self._btn_mutter.setChecked(True)
+        self._set_status("Auflagefläche anklicken …")
+
+    def _on_auflagenflaeche(self, auflagen_link, auflagen_face, auflagen_face_name):
+        """Callback: Auflagefläche selektiert → Mutter endgültig einfügen."""
+        self._btn_mutter.setChecked(False)
+        self._set_status("Füge Mutter ein …")
+        try:
+            mutter_body = get_mutter_body()
+            if mutter_body is None:
+                self._set_status("Mutter-Body nicht gefunden.", error=True)
+                self._mutter_aufraeuemen()
                 return
 
-        body = schrauben_doc.getObject(body_name)
-        if body is None:
-            # Fallback: per Label suchen
-            for obj in schrauben_doc.Objects:
-                if obj.Label == body_label:
-                    body = obj
-                    break
-        if body is None:
-            self._set_status(f"Body '{body_name}' (Label: '{body_label}') nicht in Schrauben-Datei.", error=True)
-            App.Console.PrintError(f"Verfügbare Objekte: {[o.Name+'/'+o.Label for o in schrauben_doc.Objects]}\n")
-            return
-
-        App.Console.PrintMessage(f"Schraube gewählt: Name={body.Name} Label={body.Label}\n")
-
-        self._gewaehlter_body  = body
-        self._gewaehlter_label = body_label
-
-        # Assembly jetzt prüfen
-        assembly = get_active_assembly()
-        if assembly is None:
-            QtWidgets.QMessageBox.critical(
-                self,
-                "Kein Assembly aktiv",
-                "Bitte zuerst das Assembly-Dokument aktivieren\n"
-                "(Fenster anklicken oder in der Dokumentenliste auswählen)."
+            joint, mutter_link = mutter_einfuegen_frei(
+                self._mutter_assembly,
+                mutter_body,
+                MUTTER_LABEL,
+                auflagen_link, auflagen_face, auflagen_face_name,
+                self._mutter_achse_orig,
+                self._mutter_achse_richt,
+                self._mutter_kreis_link,
+                self._mutter_kreis_edge,
+                vorschau_link=self._mutter_link_vorschau,
+                zufaellig_drehen=self._cb_zufall.isChecked(),
             )
-            self._gewaehlter_body = None
-            # Knopf-Auswahl zurücksetzen
-            self._highlight_active_btn(None)
-            checked = self._btn_gruppe.checkedButton()
-            if checked:
-                checked.setChecked(False)
-            self._set_status("Schraube wählen, dann Lochrand anklicken.")
+            if joint:
+                self._letzter_joint = joint
+                self._btn_edit.setEnabled(True)
+                self._history.append(('mutter', mutter_link, joint))
+                self._btn_undo.setEnabled(True)
+                self._set_status("Mutter eingefügt.")
+                Gui.Selection.clearSelection()
+            else:
+                self._set_status("Fehler beim Einfügen der Mutter.", error=True)
+                self._mutter_aufraeuemen()
+                return
+        except Exception as e:
+            msg = str(e)
+            self._set_status(f"Mutter-Fehler: {msg}", error=True)
+            App.Console.PrintError(f"mutter_einfuegen_frei: {msg}\n")
+            if "Kein Schnittpunkt" in msg:
+                # Selektion leeren damit Observer nicht sofort wieder feuert
+                Gui.Selection.clearSelection()
+                self._obs_flaeche = _FlächeObserver(self._on_auflagenflaeche)
+                self._obs_flaeche.start()
+                self._btn_mutter.setChecked(True)
+                return
+            self._mutter_aufraeuemen()
             return
 
-        self._set_status(
-            f"{body_label} gewählt.\n"
-            f"Assembly: {assembly.Document.Label}\n"
-            "Bitte Lochrand anklicken …")
+        self._mutter_link_vorschau = None
+        self._mutter_achse_orig    = None
+        self._mutter_achse_richt   = None
+        self._mutter_assembly      = None
+        self._mutter_kreis_link    = None
+        self._mutter_kreis_edge    = None
 
-    # --- Einfügen -----------------------------------------------------------
+    def _mutter_aufraeuemen(self):
+        """Vorschau-Mutter entfernen und Zustand zurücksetzen."""
+        if self._mutter_link_vorschau is not None:
+            try:
+                App.ActiveDocument.removeObject(self._mutter_link_vorschau.Name)
+                pass  # kein globales recompute
+            except Exception:
+                pass
+        self._mutter_link_vorschau = None
+        self._mutter_achse_orig    = None
+        self._mutter_achse_richt   = None
+        self._mutter_assembly      = None
 
-    def _schraube_einfuegen_jetzt(self, target_link, edge, edge_name, raw_obj, click_pos=None, real_axis=None, real_center=None):
-        self._mutter_zu_schraube_aktiv = False
-        if hasattr(self, '_btn_mutter_zu_schraube'):
-            self._btn_mutter_zu_schraube.setChecked(False)
-            self._btn_mutter_zu_schraube.setStyleSheet("")
-        App.Console.PrintMessage(
-            f"Optionen: Zufällig={self._cb_zufall.isChecked()} "
-            f"Mutter={self._cb_mutter.isChecked()}\n")
-        assembly = get_active_assembly()
-        if assembly is None:
-            self._set_status("Kein aktives Assembly gefunden.", error=True)
-            return
+    # -----------------------------------------------------------------------
+    # Einfüge-Logik: Schraube
+    # -----------------------------------------------------------------------
 
-        self._einfuegen_aktiv = True
-        self._set_status(f"Füge {self._gewaehlter_label} ein …")
+    def _schraube_einfuegen(self, assembly, link, edge, edge_name):
+        # real_axis und real_center aus resolve=0 Selektion holen
+        real_axis = None
+        real_center = None
+        raw_obj = link
+        try:
+            sel = Gui.Selection.getSelectionEx('', 0)
+            for s in sel:
+                for i, subname in enumerate(s.SubElementNames):
+                    if i >= len(s.SubObjects):
+                        continue
+                    subobj = s.SubObjects[i]
+                    if hasattr(subobj, 'Curve') and isinstance(subobj.Curve, Part.Circle):
+                        real_axis   = subobj.Curve.Axis
+                        real_center = subobj.Curve.Center
+                        raw_obj     = s.Object
+                        break
+                if real_axis:
+                    break
+        except Exception:
+            pass
 
         try:
             result = schraube_einfuegen(
                 assembly,
-                self._gewaehlter_body,
-                self._gewaehlter_label,
-                target_link, edge, edge_name, raw_obj,
-                click_pos=click_pos,
+                self._aktiver_body,
+                self._aktiver_label,
+                link, edge, edge_name, raw_obj,
                 real_axis=real_axis,
                 real_center=real_center,
-                zufaellig_drehen=self._cb_zufall.isChecked()
+                zufaellig_drehen=self._cb_zufall.isChecked(),
             )
-            joint, center_global, axis_global, schraube_link, lcs_bolt_edge, cog_unbekannt = result
-        except ValueError as e:
-            self._set_status(str(e), error=True)
-            joint = schraube_link = lcs_bolt_edge = None
-            center_global = axis_global = None
-            cog_unbekannt = False
-        finally:
-            self._einfuegen_aktiv = False
-
-        if joint is None:
-            self._set_status("Fehler beim Einfügen.", error=True)
+            if result is None:
+                self._set_status("Fehler beim Einfügen.", error=True)
+                return
+            joint, lcs_welt, achse_richt, schraube_link, lcs_edge, cog_unbekannt = result
+        except Exception as e:
+            self._set_status(f"Fehler: {e}", error=True)
+            App.Console.PrintError(f"schraube_einfuegen: {e}\n")
             return
 
         self._letzter_joint         = joint
-        self._letzter_gesetzter_joint = joint
         self._letzter_schraube_link = schraube_link
-        self._letzter_lcs_bolt_edge = lcs_bolt_edge
-        self._letzte_achse_ursprung = center_global
-        self._letzte_achse_richtung = axis_global
-        self._btn_edit_constraint.setEnabled(True)
+        self._letzter_lcs_bolt_edge = lcs_edge
+        self._letzte_achse_ursprung = lcs_welt
+        self._letzte_achse_richtung = achse_richt
+        self._btn_flip.setEnabled(True)
+        self._btn_edit.setEnabled(True)
+        self._history.append(('schraube', schraube_link, joint))
+        self._btn_undo.setEnabled(True)
+        self._set_status(f"{self._aktiver_label} eingefügt.")
+        Gui.Selection.clearSelection()
 
-        if cog_unbekannt:
-            self._btn_flip.setVisible(True)
-            self._set_status(f"{self._gewaehlter_label} eingefügt.\n⚠ Orientierung unbekannt – ggf. Flip drücken.")
-        elif self._cb_mutter.isChecked():
-            self._mutter_vorschau()
-        else:
-            self._set_status(f"{self._gewaehlter_label} eingefügt.\nNächsten Lochrand anklicken …")
+    # -----------------------------------------------------------------------
+    # Aktions-Buttons
+    # -----------------------------------------------------------------------
 
-    def _mutter_einfuegen_jetzt(self, target_link, face, face_name):
-        """Mutter auf der angeklickten Fläche einfügen."""
-        self._warte_auf_flaeche = False
-
-        if self._letzte_achse_ursprung is None or self._letzter_schraube_link is None:
-            self._set_status("Keine Schraube bekannt.\nBitte zuerst eine Schraube einfügen.", error=True)
-            return
-
-        assembly = get_active_assembly()
-        if assembly is None:
-            self._set_status("Kein aktives Assembly gefunden.", error=True)
-            return
-
-        mutter_body = get_mutter_body()
-        if mutter_body is None:
-            self._set_status(f"Mutter-Body '{MUTTER_LABEL}' nicht gefunden.", error=True)
-            return
-
-        try:
-            vorschau = getattr(self, '_mutter_vorschau_link_gesichert', None)
-            self._mutter_vorschau_link_gesichert = None
-            joint = mutter_einfuegen(
-                assembly, mutter_body, MUTTER_LABEL,
-                target_link, face, face_name,
-                self._letzte_achse_ursprung,
-                self._letzte_achse_richtung,
-                self._letzter_schraube_link,
-                self._letzter_lcs_bolt_edge,
-                vorschau_link=vorschau
-            )
-            if joint:
-                self._letzter_mutter_joint = joint
-                self._letzter_gesetzter_joint = joint
-                self._btn_edit_constraint.setEnabled(True)
-                # Zufallsdrehung ±30° in 10°-Schritten
-                if self._cb_zufall.isChecked():
-                    import random as _random
-                    winkel = _random.choice(list(range(-30, 31, 10)))
-                    joint.Offset2 = App.Placement(
-                        App.Vector(0, 0, joint.Offset2.Base.z),
-                        App.Rotation(*[float(winkel), 0.0, 0.0]))
-                    assembly.Document.recompute()
-                    App.Console.PrintMessage(f"  Mutter Zufallsdrehung: {winkel}°\n")
-                self._set_status("Mutter eingefügt.\nNächste Schraube anklicken …")
-            else:
-                self._set_status("Fehler beim Einfügen der Mutter.", error=True)
-        except Exception as e:
-            self._set_status(f"Mutter-Fehler: {e}", error=True)
-            App.Console.PrintError(f"mutter_einfuegen: {e}\n")
-
-    # --- Nachjustieren ------------------------------------------------------
-
-    def _on_nachjustieren_schraube(self):
+    def _on_flip(self):
         if self._letzter_joint is None:
-            self._set_status("Noch keine Schraube eingefügt.", error=True)
             return
-        # Standard-FreeCAD-Dialog öffnen (Doppelklick-Äquivalent)
         try:
-            Gui.ActiveDocument.setEdit(self._letzter_joint.Name)
+            j = self._letzter_joint
+            j.Proxy.flipOnePart(j)
+            self._set_status("Schraube geflippt.")
         except Exception as e:
-            self._set_status(f"Fehler beim Öffnen des Dialogs: {e}", error=True)
+            self._set_status(f"Flip-Fehler: {e}", error=True)
 
-    def _on_nachjustieren_mutter(self):
-        # TODO: Eigener 1D-Offset-Dialog in v0.2
-        self._set_status("Nachjustieren Mutter noch nicht implementiert (kommt in v0.2).")
+    def _on_edit(self):
+        if self._letzter_joint is None:
+            return
+        try:
+            self._letzter_joint.ViewObject.doubleClicked()
+        except Exception as e:
+            self._set_status(f"Edit-Fehler: {e}", error=True)
 
-    # --- Hilfsmethoden ------------------------------------------------------
+    def _on_undo(self):
+        if not self._history:
+            return
+        entry = self._history.pop()
+        try:
+            doc = App.ActiveDocument
+            _, link, joint = entry
+            doc.removeObject(joint.Name)
+            doc.removeObject(link.Name)
+            pass  # kein globales recompute
+            self._letzter_joint = self._history[-1][2] if self._history else None
+            self._btn_flip.setEnabled(self._letzter_joint is not None)
+            self._btn_edit.setEnabled(self._letzter_joint is not None)
+            self._btn_undo.setEnabled(bool(self._history))
+            self._set_status("Rückgängig gemacht.")
+        except Exception as e:
+            self._set_status(f"Undo-Fehler: {e}", error=True)
+            App.Console.PrintError(f"Undo: {e}\n")
 
-    def _highlight_active_btn(self, active_btn):
-        """Hebt den gewählten Schrauben-Knopf farblich hervor."""
-        for btn in self._schrauben_btns:
-            if btn is active_btn:
-                btn.setStyleSheet(
-                    "QPushButton { background-color: #0066cc; color: white; "
-                    "font-weight: bold; border: 2px solid #004499; padding: 4px; }"
-                )
-            else:
-                btn.setStyleSheet("")
+    # -----------------------------------------------------------------------
 
     def _set_status(self, text, error=False):
         self._status.setText(text)
         color = "#aa0000" if error else "#555"
-        self._status.setStyleSheet(f"color: {color}; font-style: italic;")
+        self._status.setStyleSheet(f"color: {color}; font-style: italic; font-size: 10px;")
+        if error:
+            App.Console.PrintError(f"[nuts_and_bolts] {text}\n")
+        else:
+            App.Console.PrintMessage(f"[nuts_and_bolts] {text}\n")
+
+    def closeEvent(self, event):
+        if self._obs_flaeche is not None:
+            self._obs_flaeche.stop()
+        if self._mutter_link_vorschau is not None:
+            try:
+                App.ActiveDocument.removeObject(self._mutter_link_vorschau.Name)
+                pass  # kein globales recompute
+            except Exception:
+                pass
+        event.accept()
+
 
 
 # ---------------------------------------------------------------------------
 # Einstiegspunkt
 # ---------------------------------------------------------------------------
 
-# Dialog als Modulvariable halten (verhindert garbage collection)
 _dialog = None
 
 def main():
@@ -1549,8 +1674,7 @@ def main():
         _dialog.raise_()
         _dialog.activateWindow()
         return
-
-    _dialog = SchraubenDialog(Gui.getMainWindow())
+    _dialog = NutsAndBoltsDialog(Gui.getMainWindow())
     _dialog.show()
 
 main()
