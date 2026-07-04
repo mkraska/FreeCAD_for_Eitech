@@ -838,6 +838,40 @@ def schraube_einfuegen(assembly, body, body_label,
     p1_local = lcs_placement_im_body(body, LCS_BOLT_NAME)
     lcs_welt = actual_pl.multVec(p1_local.Base) if p1_local else center_global
 
+    # --- Plausibilitätsprüfung: liegt die Schraube wirklich auf der in
+    # Schritt 2 erkannten Bohrungsachse? Fängt Fälle ab, in denen die
+    # Joint-Referenz (z.B. durch inkonsistente getSubObjectList()-Auflösung
+    # bei manchen Bauteilen, siehe Sonderfall Sheet-Metal/Fold-Feature) auf
+    # das falsche Objekt/Element zeigt und der Solver deshalb eine
+    # geometrisch plausibel aussehende, aber tatsächlich falsche Placement
+    # berechnet - ohne dass irgendwo ein Fehler geworfen wird. ---
+    achse_n = App.Vector(axis_global.x, axis_global.y, axis_global.z)
+    if achse_n.Length > 1e-9:
+        achse_n.normalize()
+        delta = actual_pl.Base - center_global
+        laengs = delta.dot(achse_n)
+        quer_vec = delta - achse_n * laengs
+        quer_abstand = quer_vec.Length
+
+        aa_n = App.Vector(actual_axis.x, actual_axis.y, actual_axis.z)
+        if aa_n.Length > 1e-9:
+            aa_n.normalize()
+            dot_achsen = abs(aa_n.dot(achse_n))
+            dot_achsen = max(-1.0, min(1.0, dot_achsen))
+            winkel_abw = math.degrees(math.acos(dot_achsen))
+        else:
+            winkel_abw = float('nan')
+
+        QUER_SCHWELLE_MM = 1.0
+        WINKEL_SCHWELLE_GRAD = 5.0
+        if quer_abstand > QUER_SCHWELLE_MM or winkel_abw > WINKEL_SCHWELLE_GRAD:
+            App.Console.PrintWarning(
+                f"WARNUNG: Schraube '{schraube_link.Label}' weicht deutlich von der "
+                f"in Schritt 2 erkannten Bohrungsachse ab! "
+                f"Quer-Abstand={quer_abstand:.2f}mm (Schwelle {QUER_SCHWELLE_MM}mm), "
+                f"Achswinkel-Abweichung={winkel_abw:.1f}° (Schwelle {WINKEL_SCHWELLE_GRAD}°). "
+                f"Position/Joint-Referenz vermutlich falsch - bitte manuell prüfen!\n")
+
     # Schritt 6: Zufallsdrehung (optional)
     if zufaellig_drehen and joint is not None:
         import random as _random

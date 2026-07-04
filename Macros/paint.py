@@ -15,17 +15,33 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Materialdefinitionen
 # (Tooltip, diffuse, specular, ambient, shininess)
+#
+# WICHTIG (Juli 2026): Bei App::Link-Instanzen wird von FreeCAD 1.1 trotz
+# OverrideMaterial=True nur DiffuseColor tatsaechlich pro Instanz gerendert -
+# Specular/Ambient/Shininess kommen immer aus der Quelldatei (bekannter,
+# von FreeCAD-Entwicklern bestaetigter Einschraenkung, siehe GitHub Issue
+# FreeCAD/FreeCAD#19135). Deshalb: Specular/Ambient/Shininess sind bei allen
+# Farben unten auf ein gemeinsames, an der Konsole validiertes generisches
+# Profil vereinheitlicht (Specular 0.60/0.60/0.60, Ambient 0.30/0.30/0.30,
+# Shininess 0.25 - hoeher als urspruenglich verwendet, da niedrigeres
+# Shininess bei neutral-grauem Specular zu blassen/verwaesserten Farben
+# fuehrt, siehe Rot-Test; bei diesem Wert reicht das auch bei Orange ohne
+# gesonderte Behandlung). Diese Werte muessen zusaetzlich per
+# normalize_plastik.py (o.ae.) an der Quelldatei gesetzt werden, damit sie
+# bei Links wirken. Fuer "direct"-Modus-Objekte (PartDesign-Body/Feature
+# ohne Link-Wrapper) wirken sie weiterhin direkt ueber dieses Skript.
 # ---------------------------------------------------------------------------
 
 # Zeile 1: Gummi / Plastik
 ROW1 = [
-    ("Schwarz",      (0.228000,0.228000,0.228000), (0.320000,0.320000,0.320000), (0.114000,0.114000,0.114000), 0.05),
-    ("Rot",          (0.792000,0.148000,0.148000), (0.880000,0.180000,0.180000), (0.396000,0.074000,0.074000), 0.05),
-    ("Orange",       (1.000000,0.505882,0.007843), (1.000000,0.847059,0.690196), (0.694118,0.352941,0.007843), 1.0),
-    ("Gelb",         (0.784314,0.658824,0.000000), (0.831373,0.721569,0.000000), (0.376471,0.313725,0.000000), 0.05),
-    ("Blau",         (0.003922,0.329412,0.635294), (0.125490,0.250980,0.627451), (0.000000,0.196078,0.490196), 0.05),
-    ("Grau",         (0.678431,0.709804,0.741176), (0.800000,0.800000,0.800000), (0.339216,0.354902,0.370588), 0.25),
-    ("Weiss",        (1.000000,0.984314,0.941176), (0.800000,0.800000,0.800000), (0.500000,0.490000,0.470000), 0.25),
+    ("Schwarz",      (0.228000,0.228000,0.228000), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
+    ("Rot",          (0.792000,0.148000,0.148000), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
+    ("Orange",       (1.000000,0.505882,0.007843), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
+    ("Gelb",         (0.784314,0.658824,0.000000), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
+    ("Beige (C13)",  (0.992157,0.729412,0.003922), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
+    ("Blau",         (0.003922,0.329412,0.635294), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
+    ("Grau",         (0.678431,0.709804,0.741176), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
+    ("Weiss",        (1.000000,0.984314,0.941176), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
 ]
 
 # Zeile 2: Metall + Standard-Reset

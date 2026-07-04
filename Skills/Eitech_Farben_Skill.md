@@ -1,5 +1,5 @@
 ---
-## paint.py – Farbeinfärbung (v1)
+## paint.py – Farbeinfärbung (v2, Juli 2026)
 
 ### Zweck
 Nicht-modaler Farbdialog zum Einfärben von Teilen in Teiledateien und Assembly-Instanzen.
@@ -12,16 +12,29 @@ Ersetzt den FreeCAD Appearance-Dialog für den Eitech-Workflow.
 
 ### Materialien
 
-#### Zeile 1 – Gummi / Plastik (Shininess 0.05–1.0)
+#### Zeile 1 – Gummi / Plastik
+Seit Juli 2026 einheitliches generisches Profil für **alle** Farben:
+`Specular=(0.60,0.60,0.60)`, `Ambient=(0.30,0.30,0.30)`, `Shininess=0.25`.
+Nur `Diffuse` unterscheidet sich je Farbe. Grund und Hintergrund siehe
+Abschnitt "Bekanntes FreeCAD-Problem" weiter unten.
+
 | Name    | Diffuse (R,G,B)              | Hinweis                        |
 |---------|------------------------------|--------------------------------|
 | Schwarz | (0.228, 0.228, 0.228)        | Aufgehellt für Kantensichtbarkeit |
 | Rot     | (0.792, 0.148, 0.148)        |                                |
-| Orange  | (1.000, 0.506, 0.008)        | Shininess=1.0, Specular warm-orange – verhindert Gelbstich |
+| Orange  | (1.000, 0.506, 0.008)        | Keine Sonderbehandlung mehr nötig (siehe unten) |
 | Gelb    | (0.784, 0.659, 0.000)        |                                |
+| Beige (C13) | (0.992, 0.729, 0.004)     | Aus HTML `#fdba01`; kommt nur in Kasten C13 vor |
 | Blau    | (0.004, 0.329, 0.635)        |                                |
 | Grau    | (0.678, 0.710, 0.741)        | Plastik-Grau                   |
 | Weiss   | (1.000, 0.984, 0.941)        | Leicht vergilbt                |
+
+**Warum Shininess=0.25 statt ursprünglich 0.05**: Bei niedrigem Shininess wird
+das (neutral-graue) Specular-Glanzlicht breit/weich und überdeckt einen großen
+Teil der Fläche → Farben wirken blass/verwaschen (an `Rot` beobachtet und
+bestätigt). Bei 0.25 satter, ohne dass ein zusätzlicher Gelbstich-Workaround
+für Orange nötig wäre (der alte `Shininess=1.0`+warmer-Specular-Sonderfall für
+Orange ist damit obsolet und wurde entfernt).
 
 #### Zeile 2 – Metall + Standard-Reset (Shininess 0.90)
 Basiert auf FreeCAD-Standardmaterial: Diffuse (173,181,189), Ambient (85,85,85),
@@ -40,10 +53,11 @@ Blaustich beibehalten, nur Helligkeit skaliert.
 ---
 
 ### Physikalische Grundregeln für Materialien
-- **Metalle**: Specular = eingefärbter Glanz (Farbe des Metalls), hohe Shininess
-- **Nicht-Metalle** (Plastik, Gummi): Specular = neutrales Grau/Weiß, niedriger Glanz
-- **Ausnahme Orange**: Specular warm-orange `(1.0, 0.847, 0.690)` + Shininess=1.0
-  um Gelbstich bei niedrigem Shininess zu vermeiden
+- **Metalle**: Specular = eingefärbter Glanz (Farbe des Metalls), hohe Shininess (0.90)
+- **Nicht-Metalle** (Plastik, Gummi): Specular = neutrales Grau, niedriger-moderater
+  Glanz (0.25) – siehe generisches Profil oben; die früher pro Farbe individuell
+  abgestimmten Specular/Ambient-Werte (inkl. Orange-Sonderfall) wurden zugunsten
+  eines einheitlichen Profils aufgegeben, siehe unten warum
 - **Schwarze Teile**: nie reines `(0,0,0)` – Kanten verschwinden; Minimum `(0.15,0.15,0.15)`
 
 ---
@@ -68,9 +82,68 @@ Mehrfachauswahl: im Strukturbaum Ctrl+Klick oder Shift+Klick.
 - **Link**: `OverrideMaterial = False` → Original aus Teiledatei wird wieder sichtbar
 - **Body/Feature**: Standardmaterial setzen (Diffuse 0.678/0.710/0.741)
 
+---
+
+### Bekanntes FreeCAD-Problem: `App::Link`-Override ist unvollständig (Juli 2026)
+
+**Symptom**: Zwei Teile mit unterschiedlicher Original-Farbe (z.B. weiß und rot),
+beide über `paint.py` auf dieselbe Farbe gesetzt, sehen trotzdem sichtbar
+unterschiedlich aus (z.B. "golden" vs. "orange" statt beide gleich "beige").
+
+**Ursache (an der Konsole verifiziert)**: Bei `App::Link`-Instanzen wird trotz
+`OverrideMaterial=True` **nur `DiffuseColor`** tatsächlich pro Instanz gerendert.
+`SpecularColor`, `AmbientColor`, `EmissiveColor` und `Shininess` bleiben immer
+von der Original-Teiledatei geerbt, unabhängig vom Override-Flag.
+
+**Bestätigt als offizielles FreeCAD-Problem**:
+[GitHub Issue FreeCAD/FreeCAD#19135](https://github.com/FreeCAD/FreeCAD/issues/19135)
+("Materials: Linked object needs Material and Appearance overrides"),
+eingereicht vom Hauptentwickler des Materials-Systems selbst, als "Feature"
+(nicht "Bug") eingestuft → vollständiges Instanz-Override ist noch nicht
+implementiert, nicht nur ein kleiner Fehler. Verwandt: #23444 (Linien/Punkte
+werden beim Override grau), #14779, #15170 (weitere `ShapeAppearance`-Regressionen).
+
+**⚠️ WICHTIGE GEFAHR – niemals `vp.ShapeAppearance` direkt auf einem Link setzen**:
+`ShapeAppearance` (Property-Gruppe "Link", zusammen mit `OverrideMaterial`) sieht
+aus wie die richtige, instanzbezogene Property – ist es aber **nicht**. An der
+Konsole bestätigt: Ändert man `link.ViewObject.ShapeAppearance`, ändert sich
+**auch das Original in der Quelldatei** – und zwar in beide Richtungen (Quelle
+ändern färbt auch die Instanz um), **selbst bei `OverrideMaterial=True`**. Diese
+Property ist schlicht mit der Quelle verklebt/aliasiert. Ein Fix-Versuch, der
+`ShapeAppearance` zusätzlich setzt, wurde deshalb wieder verworfen – er hätte
+bei jeder Farbzuweisung die Original-Teiledatei korrumpiert (mit Auswirkung auf
+alle Stellen im Projekt, wo dieses Teil verwendet wird).
+
+`ShapeMaterial` (Property-Gruppe "Object Style") ist dagegen tatsächlich
+instanzbezogen und sicher – aber wie oben beschrieben wirkt davon eben nur
+`DiffuseColor`.
+
+**Workaround (aktueller Stand)**: Da nur `Diffuse` pro Instanz überschreibbar
+ist, `Specular`/`Ambient`/`Shininess` aber ohnehin nicht, wurden diese Kanäle
+stattdessen **an der Quelldatei selbst** auf ein einheitliches generisches
+Profil normiert (siehe `normalize_plastik.py`) – die einzelnen Teiledateien
+dürfen sich dadurch nur noch in ihrer eigenen "Hintergrundfarbe" (`Diffuse`,
+nur sichtbar wenn man die Teiledatei direkt öffnet, ohne Override) unterscheiden.
+`paint.py`s `ROW1` wurde entsprechend auf dasselbe Profil vereinheitlicht
+(siehe Materialien-Tabelle oben). Sobald FreeCAD #19135 implementiert ist,
+kann die alte pro-Farbe-Feinabstimmung (Orange-Sonderfall etc.) wieder
+reaktiviert werden.
+
+**`normalize_plastik.py`** (einmaliges Normalisierungsskript, kein Dauer-Makro):
+- Geht durch alle `PartDesign::Body`/`Part::Feature`-Objekte einer Teiledatei
+  (z.B. `Plastik.FCStd`)
+- Setzt `Specular`/`Ambient`/`Emissive`/`Shininess` auf das generische Profil
+- Lässt `Diffuse` pro Teil unverändert (auch bei Mehrfach-Material-Listen,
+  jeder Listeneintrag behält seine eigene `Diffuse`)
+- Speichert nichts automatisch – Ergebnis erst prüfen, dann selbst speichern
+- Für Metall-Teiledateien bräuchte es ein analoges Skript mit dem
+  Metall-Profil (`ROW2`/`MAT_STANDARD`-Werte) – noch nicht gebaut
+
 #### Wichtig: Appearance-Dialog vs. Python
 - Der FreeCAD Appearance-Dialog schreibt bei Links ins **Original** (Bug in FreeCAD 1.1+)
-- `ViewObject.OverrideMaterial = True` per Python schreibt **nur in die Instanz** → korrekt
+- `ViewObject.OverrideMaterial = True` per Python + `ShapeMaterial` schreibt
+  **nur in die Instanz** → korrekt, aber wirkt eben nur für `DiffuseColor`
+  (siehe oben)
 
 ---
 
