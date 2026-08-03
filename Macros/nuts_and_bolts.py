@@ -104,6 +104,20 @@ LCS_NUT_NAME  = "LCS_nut"
 MUTTER_LABEL     = "Mutter"
 MUTTER_DICKE     = 3.2
 
+# Gewindestift, Zylinderflächen-Methode: Fallback-Wert für den Achsversatz
+# (siehe achsversatz in _get_selektierte_zylinderflaeche_stift), falls die
+# axiale Ausdehnung der Fläche nicht ermittelt werden kann (z.B. keine
+# Vertexes). Normalerweise wird stattdessen die tatsächliche axiale
+# Ausdehnung der angeklickten Fläche verwendet.
+GEWINDESTIFT_ZYLINDER_OFFSET = 2.0  # mm
+
+# Länge des Gewindestifts (Body005), von LCS_bolt-Ursprung bis Spitze.
+# Fest verdrahtet, weil die generische Längenermittlung über
+# schrauben_laenge=p1.Base.z (wie bei Kopfschrauben) hier NICHT funktioniert:
+# die liegt davon aus, dass der Body-Koordinatenursprung an der
+# Schraubenspitze sitzt - beim Gewindestift-Body ist das nicht der Fall.
+GEWINDESTIFT_LAENGE = 4.0  # mm
+
 # Format für Dialog: (Anzeigename, Body-Name, Icon-Name, ist_gewindestift)
 SCHRAUBEN = [
     ("Schraube 6 Schlitz",  "Body",    "Schraube_6_Schlitz",  False),
@@ -526,7 +540,7 @@ def get_selected_face():
 def schraube_einfuegen(assembly, body, body_label,
                         target_link, edge, edge_name, raw_obj,
                         click_pos=None, real_axis=None, real_center=None,
-                        zufaellig_drehen=False):
+                        zufaellig_drehen=False, ist_gewindestift=False):
     """
     Fügt eine Schraube (body) als Link in assembly ein und verbindet sie
     mit einem Fixed Constraint an der gewählten Kreiskante.
@@ -626,6 +640,7 @@ def schraube_einfuegen(assembly, body, body_label,
     faces = []
     local_edge_for_cog = edge  # Fallback: Original-Edge-Objekt
     lokal_erfolgreich = False
+    gewindestift_korrektur_ueberspringen = False
 
     # Für den Fixed Joint (Schritt 6) brauchen wir ein Referenz-Objekt +
     # einen dazu RELATIVEN SubElementName. Standard (Fallback, falls die
@@ -638,91 +653,116 @@ def schraube_einfuegen(assembly, body, body_label,
     joint_ref2_link = target_link
     joint_ref2_edge_name = edge_name
 
-    try:
-        kette = raw_obj.getSubObjectList(edge_name)
-        leaf_obj = kette[-1]
-        letztes_segment = edge_name.split('.')[-1]
-        if letztes_segment.startswith('Edge') and hasattr(leaf_obj, 'Shape'):
-            edge_idx = int(letztes_segment[4:]) - 1
-            local_shape = leaf_obj.Shape
-            if 0 <= edge_idx < len(local_shape.Edges):
-                kandidat_edge = local_shape.Edges[edge_idx]
-                if (isinstance(kandidat_edge.Curve, P.Circle)
-                        and abs(kandidat_edge.Curve.Radius - edge.Curve.Radius) < 1e-4):
-                    try:
-                        faces = local_shape.ancestorsOfType(kandidat_edge, P.Face)
-                    except Exception:
-                        faces = []
-                    if not faces:
-                        faces, matched = _find_adjacent_faces_geometric(kandidat_edge, local_shape)
-                        if matched is not None:
-                            kandidat_edge = matched
-                    if faces:
-                        local_edge_for_cog = kandidat_edge
-                        lokal_erfolgreich = True
-                        # Joint-Referenz auf das echte Blatt-Objekt umstellen
-                        # (an der Konsole verifiziert: identisches Placement2
-                        # wie über target_link + Präfix-gestripptem Pfad).
-                        joint_ref2_link = leaf_obj
-                        joint_ref2_edge_name = letztes_segment
-                        App.Console.PrintMessage(
-                            f"Schritt 3: {len(faces)} Flächen rein lokal auf "
-                            f"{leaf_obj.Name} (Edge-Index {edge_idx}, "
-                            f"{len(local_shape.Edges)} Edges im Bauteil) gefunden\n")
+    if getattr(edge, '_ist_synthetisch', False):
+        if getattr(edge, '_orientierung_vorgegeben', False):
+            # Zylinderflächen-Methode: Achsrichtung wurde bereits über das
+            # Bauteil-CG bestimmt (siehe _get_selektierte_zylinderflaeche_stift).
+            # CoG-Erkennung UND die pauschale Gewindestift-Korrektur weiter
+            # unten müssen hier übersprungen werden, sonst würde die schon
+            # richtige Richtung nochmal umgedreht.
+            App.Console.PrintMessage(
+                "Schritt 3: synthetische Kante (Zylinderfläche) - Achsrichtung "
+                "bereits über Bauteil-CG bestimmt, CoG-Erkennung und "
+                "Gewindestift-Korrektur werden übersprungen\n")
+            cog_unbekannt = False
+            lokal_erfolgreich = False
+            gewindestift_korrektur_ueberspringen = True
+        else:
+            # Querbohrung-Kanten-Methode (Fallback): keine vorbestimmte
+            # Richtung - CoG-Erkennung überspringen (würde ohnehin nur mit
+            # TypeError/hasher-mismatch-Kaskaden scheitern, da edge kein
+            # echtes Part.Edge ist), pauschale Gewindestift-Korrektur
+            # übernimmt die Ausrichtung wie bisher.
+            App.Console.PrintMessage(
+                "Schritt 3: synthetische Kante (Querbohrung) - CoG-Erkennung "
+                "übersprungen, Gewindestift-Korrektur übernimmt die Ausrichtung\n")
+            cog_unbekannt = True
+            lokal_erfolgreich = False
+    else:
+        try:
+            kette = raw_obj.getSubObjectList(edge_name)
+            leaf_obj = kette[-1]
+            letztes_segment = edge_name.split('.')[-1]
+            if letztes_segment.startswith('Edge') and hasattr(leaf_obj, 'Shape'):
+                edge_idx = int(letztes_segment[4:]) - 1
+                local_shape = leaf_obj.Shape
+                if 0 <= edge_idx < len(local_shape.Edges):
+                    kandidat_edge = local_shape.Edges[edge_idx]
+                    if (isinstance(kandidat_edge.Curve, P.Circle)
+                            and abs(kandidat_edge.Curve.Radius - edge.Curve.Radius) < 1e-4):
+                        try:
+                            faces = local_shape.ancestorsOfType(kandidat_edge, P.Face)
+                        except Exception:
+                            faces = []
+                        if not faces:
+                            faces, matched = _find_adjacent_faces_geometric(kandidat_edge, local_shape)
+                            if matched is not None:
+                                kandidat_edge = matched
+                        if faces:
+                            local_edge_for_cog = kandidat_edge
+                            lokal_erfolgreich = True
+                            # Joint-Referenz auf das echte Blatt-Objekt umstellen
+                            # (an der Konsole verifiziert: identisches Placement2
+                            # wie über target_link + Präfix-gestripptem Pfad).
+                            joint_ref2_link = leaf_obj
+                            joint_ref2_edge_name = letztes_segment
+                            App.Console.PrintMessage(
+                                f"Schritt 3: {len(faces)} Flächen rein lokal auf "
+                                f"{leaf_obj.Name} (Edge-Index {edge_idx}, "
+                                f"{len(local_shape.Edges)} Edges im Bauteil) gefunden\n")
+                    else:
+                        App.Console.PrintWarning(
+                            f"Schritt 3: lokaler Edge-Index {edge_idx} auf {leaf_obj.Name} "
+                            f"passt nicht zur Kreiskante (Radius-Mismatch)\n")
                 else:
                     App.Console.PrintWarning(
-                        f"Schritt 3: lokaler Edge-Index {edge_idx} auf {leaf_obj.Name} "
-                        f"passt nicht zur Kreiskante (Radius-Mismatch)\n")
-            else:
-                App.Console.PrintWarning(
-                    f"Schritt 3: Edge-Index {edge_idx} außerhalb "
-                    f"({len(local_shape.Edges)} Edges auf {leaf_obj.Name})\n")
-    except Exception as ex:
-        App.Console.PrintWarning(f"Schritt 3: lokale Edge-Index-Methode fehlgeschlagen: {ex}\n")
+                        f"Schritt 3: Edge-Index {edge_idx} außerhalb "
+                        f"({len(local_shape.Edges)} Edges auf {leaf_obj.Name})\n")
+        except Exception as ex:
+            App.Console.PrintWarning(f"Schritt 3: lokale Edge-Index-Methode fehlgeschlagen: {ex}\n")
 
-    if not lokal_erfolgreich:
-        App.Console.PrintWarning(
-            "Schritt 3: lokale Methode nicht erfolgreich – "
-            "versuche welt-transformierte Kandidaten als Fallback\n")
-        search_kandidaten = []
-        try:
-            objekt_pfad = edge_name.rsplit('.', 1)[0] + '.'
-            bauteil_shape = raw_obj.getSubObject(objekt_pfad)
-            if bauteil_shape is not None and hasattr(bauteil_shape, 'Faces') and bauteil_shape.Faces:
-                search_kandidaten.append((f"Bauteil (Pfad='{objekt_pfad}')", bauteil_shape))
-        except Exception:
-            pass
-        if target_link is not None and hasattr(target_link, 'Shape') and target_link.Name != raw_obj.Name:
-            search_kandidaten.append((f"target_link={target_link.Name}", target_link.Shape))
-        search_kandidaten.append((f"raw_obj={raw_obj.Name}", raw_obj.Shape))
-
-        for such_label, such_shape in search_kandidaten:
+        if not lokal_erfolgreich:
+            App.Console.PrintWarning(
+                "Schritt 3: lokale Methode nicht erfolgreich – "
+                "versuche welt-transformierte Kandidaten als Fallback\n")
+            search_kandidaten = []
             try:
-                faces = such_shape.ancestorsOfType(edge, P.Face)
-                if not faces:
-                    raise ValueError("ancestorsOfType lieferte 0 Flächen")
-                App.Console.PrintMessage(
-                    f"Schritt 3: {len(faces)} angrenzende Flächen gefunden ({such_label})\n")
-                break
-            except Exception as ex:
-                App.Console.PrintWarning(
-                    f"Schritt 3: ancestorsOfType auf {such_label} fehlgeschlagen ({ex}) – "
-                    f"versuche geometrischen Fallback\n")
+                objekt_pfad = edge_name.rsplit('.', 1)[0] + '.'
+                bauteil_shape = raw_obj.getSubObject(objekt_pfad)
+                if bauteil_shape is not None and hasattr(bauteil_shape, 'Faces') and bauteil_shape.Faces:
+                    search_kandidaten.append((f"Bauteil (Pfad='{objekt_pfad}')", bauteil_shape))
+            except Exception:
+                pass
+            if target_link is not None and hasattr(target_link, 'Shape') and target_link.Name != raw_obj.Name:
+                search_kandidaten.append((f"target_link={target_link.Name}", target_link.Shape))
+            search_kandidaten.append((f"raw_obj={raw_obj.Name}", raw_obj.Shape))
+
+            for such_label, such_shape in search_kandidaten:
                 try:
-                    faces, matched_local_edge = _find_adjacent_faces_geometric(edge, such_shape)
-                    if faces:
-                        if matched_local_edge is not None:
-                            local_edge_for_cog = matched_local_edge
-                        App.Console.PrintMessage(
-                            f"Schritt 3: {len(faces)} Flächen via geometrischem Fallback "
-                            f"auf {such_label} gefunden\n")
-                        break
-                except Exception as ex2:
+                    faces = such_shape.ancestorsOfType(edge, P.Face)
+                    if not faces:
+                        raise ValueError("ancestorsOfType lieferte 0 Flächen")
+                    App.Console.PrintMessage(
+                        f"Schritt 3: {len(faces)} angrenzende Flächen gefunden ({such_label})\n")
+                    break
+                except Exception as ex:
                     App.Console.PrintWarning(
-                        f"Schritt 3: geometrischer Fallback auf {such_label} fehlgeschlagen: {ex2}\n")
+                        f"Schritt 3: ancestorsOfType auf {such_label} fehlgeschlagen ({ex}) – "
+                        f"versuche geometrischen Fallback\n")
+                    try:
+                        faces, matched_local_edge = _find_adjacent_faces_geometric(edge, such_shape)
+                        if faces:
+                            if matched_local_edge is not None:
+                                local_edge_for_cog = matched_local_edge
+                            App.Console.PrintMessage(
+                                f"Schritt 3: {len(faces)} Flächen via geometrischem Fallback "
+                                f"auf {such_label} gefunden\n")
+                            break
+                    except Exception as ex2:
+                        App.Console.PrintWarning(
+                            f"Schritt 3: geometrischer Fallback auf {such_label} fehlgeschlagen: {ex2}\n")
 
     # center_local/axis_local stammen aus local_edge_for_cog, die garantiert
-
     # im gleichen lokalen KS liegt wie face.CenterOfGravity -> kein
     # Transformieren nötig.
     center_local = local_edge_for_cog.Curve.Center
@@ -759,6 +799,19 @@ def schraube_einfuegen(assembly, body, body_label,
     else:
         App.Console.PrintWarning(f"Schritt 3: Orientierung unbekannt – Flip-Button verfügbar\n")
         cog_unbekannt = True
+
+    # Gewindestifte haben (im Unterschied zu Schrauben mit Kopf) keine
+    # Kopfauflage - die CoG-Methode geht von "Kopf liegt am Material an,
+    # Schaft zeigt ins Material" aus, was fuer einen bündig/versenkt
+    # eingeschraubten Gewindestift nicht zutrifft. Empirisch (Juli 2026):
+    # Gewindestifte kommen mit der obigen Logik konsistent um 180° verdreht
+    # herein (manuell per Flip-Button korrigierbar) -> hier automatisch
+    # zusaetzlich umdrehen. Falls sich das kuenftig als nicht mehr generell
+    # zutreffend herausstellt, hier zuerst nachsehen.
+    if ist_gewindestift and not gewindestift_korrektur_ueberspringen:
+        axis_global = App.Vector(-axis_global.x, -axis_global.y, -axis_global.z)
+        App.Console.PrintMessage(
+            f"Schritt 3: Gewindestift-Korrektur: Achse zusaetzlich umgedreht\n")
 
 
     # Numerisches Rauschen entfernen: Komponenten nahe 0 oder ±1 snappen
@@ -872,14 +925,70 @@ def schraube_einfuegen(assembly, body, body_label,
                 f"Achswinkel-Abweichung={winkel_abw:.1f}° (Schwelle {WINKEL_SCHWELLE_GRAD}°). "
                 f"Position/Joint-Referenz vermutlich falsch - bitte manuell prüfen!\n")
 
-    # Schritt 6: Zufallsdrehung (optional)
-    if zufaellig_drehen and joint is not None:
-        import random as _random
-        winkel = _random.choice(list(range(-90, 91, 10)))
+    # Zylinderflächen-Methode + normale Schraube (kein Gewindestift):
+    # achse zeigt hier immer "ins Material" (siehe
+    # _get_selektierte_zylinderflaeche_stift) - das ist die Konvention, mit
+    # der der Gewindestift-Body korrekt sitzt (bestätigt 07.07.2026), bei
+    # den Kopfschrauben-Bodies aber offenbar 180° verdreht ankommt (Position
+    # stimmt, Ausrichtung nicht - manuell per Flip-Button korrigierbar).
+    # Deshalb hier automatisch genau den Flip auslösen, den der Flip-Button
+    # auch auslöst (joint.Proxy.flipOnePart), statt eine eigene, ungetestete
+    # Rotationsformel zu raten.
+    if (getattr(edge, '_orientierung_vorgegeben', False)
+            and not ist_gewindestift and joint is not None):
+        try:
+            joint.Proxy.flipOnePart(joint)
+            joint.recompute()
+            App.Console.PrintMessage(
+                "Schritt 6: Zylinderflächen-Methode bei normaler Schraube - "
+                "automatischer Flip angewendet\n")
+        except Exception as ex:
+            App.Console.PrintWarning(f"Schritt 6: automatischer Flip fehlgeschlagen: {ex}\n")
+
+    # Schritt 6: Achsversatz (z.B. bei Gewindestift/Zylinderflächen-Methode)
+    # und/oder Zufallsdrehung, kombiniert in EINEM Offset2, da ein zweiter
+    # Set sonst den ersten überschreiben würde.
+    # Wichtig: der Versatz muss über joint.Offset2 laufen, NICHT über eine
+    # Verschiebung von center vor der Joint-Erstellung - Reference2 zeigt
+    # auf die echte Referenzgeometrie im Dokument, deren Placement2 der
+    # Solver bei recompute() ohnehin neu aus dieser Geometrie berechnet
+    # (ein vorher verschobener center würde also verworfen).
+    #
+    # ziel_t_achse (aus _get_selektierte_zylinderflaeche_stift) ist die
+    # Sollposition der SCHRAUBENSPITZE, projiziert auf achse relativ zum
+    # CoG der Zylinderfläche. Der Joint setzt aber den ANDEREN Endpunkt der
+    # Schraube (LCS_bolt-Ursprung) auf center_global + Offset2 - die Spitze
+    # liegt "länge" weiter in achse-Richtung davon entfernt. Damit die
+    # Spitze bei ziel_t_achse landet, muss der Ursprung um
+    # (ziel_t_achse - länge) versetzt werden (an der Konsole hergeleitet,
+    # 07.07.2026: Beispiel ziel_t_achse=0.98mm, länge=4mm ->
+    # Achsversatz=-3.02mm).
+    #
+    # WICHTIG: "länge" ist hier NICHT schrauben_laenge (=p1.Base.z, siehe
+    # Schritt 5) - diese generische Ableitung setzt voraus, dass der
+    # Body-Koordinatenursprung an der Schraubenspitze liegt (Konvention bei
+    # den Kopfschrauben-Bodies). Beim Gewindestift-Body ist das nicht der
+    # Fall, deshalb hier für ist_gewindestift die fest verdrahtete
+    # GEWINDESTIFT_LAENGE verwenden.
+    ziel_t_achse = getattr(edge, '_ziel_t_achse', None)
+    if ziel_t_achse is not None:
+        laenge_bis_spitze = GEWINDESTIFT_LAENGE if ist_gewindestift else schrauben_laenge
+        achsversatz = ziel_t_achse - laenge_bis_spitze
+    else:
+        achsversatz = getattr(edge, '_achsversatz', 0.0)
+    if (achsversatz or zufaellig_drehen) and joint is not None:
+        winkel = 0.0
+        if zufaellig_drehen:
+            import random as _random
+            winkel = _random.choice(list(range(-90, 91, 10)))
         joint.Offset2 = App.Placement(
-            App.Vector(0, 0, 0),
-            App.Rotation(*[float(winkel), 0.0, 0.0]))
+            App.Vector(0, 0, achsversatz),
+            App.Rotation(float(winkel), 0.0, 0.0))
         joint.recompute()
+        if achsversatz:
+            App.Console.PrintMessage(
+                f"Schritt 6: Achsversatz Offset2.Z={achsversatz:.2f} mm "
+                f"(schrauben_laenge={schrauben_laenge:.2f}mm)\n")
 
     return joint, lcs_welt, actual_axis, schraube_link, lcs_edge, cog_unbekannt
 
@@ -1312,6 +1421,299 @@ class NutsAndBoltsDialog(QtWidgets.QDialog):
             App.Console.PrintWarning(f"Selektion Kreiskante: {e}\n")
         return None
 
+    def _get_selektierte_zylinderflaeche_stift(self):
+        """
+        Bevorzugte Alternative für Gewindestifte in einer Querbohrung:
+        Direkt die zylindrische Bohrungsfläche anklicken (statt der schwer
+        exakt zu treffenden, nicht-ebenen Schnittkurve am Bohrungseintritt).
+
+        Positionierung: CG des Stifts = CG der angeklickten Zylinderfläche.
+
+        Richtungssinn (Heuristik): Der CG des GESAMTEN Bauteils zeigt an,
+        wo die Materialmasse liegt - die Stift-Achse (die "ins Material"
+        zeigen soll, gleiche Konvention wie bei normalen Schrauben) wird
+        so ausgerichtet, dass sie zum Bauteil-CG hin zeigt.
+
+        Gibt (link, synthetische_kante, subname) zurück - mit bereits
+        korrekt bestimmter Achsrichtung (_orientierung_vorgegeben=True),
+        damit schraube_einfuegen() weder die (hier unpassende) CoG-
+        Erkennung noch die pauschale Gewindestift-Korrektur anwendet.
+        """
+        class _SyntheticCircle:
+            def __init__(self, center, axis, radius):
+                self.Center = center
+                self.Axis = axis
+                self.Radius = radius
+
+        class _SyntheticEdge:
+            _ist_synthetisch = True
+
+            def __init__(self, curve, orientierung_vorgegeben=False, ziel_t_achse=None):
+                self.Curve = curve
+                self._orientierung_vorgegeben = orientierung_vorgegeben
+                # Sollposition der Schraubenspitze, als Projektion auf
+                # achse relativ zum CoG der Zylinderfläche (siehe unten) -
+                # der Achsversatz für joint.Offset2 wird erst in
+                # schraube_einfuegen() daraus berechnet, da dort erst die
+                # Länge der jeweiligen Schraube (schrauben_laenge) bekannt
+                # ist: achsversatz = ziel_t_achse - schrauben_laenge.
+                self._ziel_t_achse = ziel_t_achse
+
+        try:
+            sel = Gui.Selection.getSelectionEx('', 0)
+            for s in sel:
+                for i, subname in enumerate(s.SubElementNames):
+                    if i >= len(s.SubObjects):
+                        continue
+                    subobj = s.SubObjects[i]
+                    if subobj.ShapeType != 'Face':
+                        continue
+                    if not isinstance(subobj.Surface, Part.Cylinder):
+                        continue
+
+                    surf = subobj.Surface
+                    achse = App.Vector(surf.Axis.x, surf.Axis.y, surf.Axis.z)
+                    achse.normalize()
+                    center = subobj.CenterOfGravity
+
+                    # Blatt-Objekt (ganzes Bauteil) für Gesamt-CG auflösen
+                    try:
+                        kette = s.Object.getSubObjectList(subname)
+                        leaf_obj = kette[-1]
+                    except Exception:
+                        leaf_obj = s.Object
+                    gesamt_shape = getattr(leaf_obj, 'Shape', None)
+
+                    orientierung_ok = False
+                    if gesamt_shape is not None:
+                        try:
+                            bauteil_cog = gesamt_shape.CenterOfGravity
+                            richtung = bauteil_cog - center
+                            t = richtung.dot(achse)
+                            if t < 0:
+                                # Bauteil-Masse liegt in -achse-Richtung ->
+                                # Achse (soll "ins Material" zeigen) umdrehen
+                                achse = App.Vector(-achse.x, -achse.y, -achse.z)
+                            orientierung_ok = True
+                            App.Console.PrintMessage(
+                                f"Gewindestift: Zylinderfläche R={surf.Radius:.2f} "
+                                f"angeklickt, Richtung via Bauteil-CG bestimmt "
+                                f"(t={t:.2f})\n")
+                        except Exception as ex:
+                            App.Console.PrintWarning(
+                                f"Gewindestift: Bauteil-CG-Bestimmung fehlgeschlagen: "
+                                f"{ex} - Richtung evtl. falsch, Flip-Button nutzen\n")
+                    else:
+                        App.Console.PrintWarning(
+                            "Gewindestift: kein Bauteil-Shape für CG gefunden - "
+                            "Richtung evtl. falsch, Flip-Button nutzen\n")
+
+                    # Sollposition der Schraubenspitze: bei einer Madenschraube
+                    # in einer Querbohrung, die in eine zweite (Haupt-)Bohrung
+                    # mündet, ist die innere Randkurve die (nicht-plane)
+                    # Schnittkurve beider Bohrungen. Die Spitze soll genau an
+                    # dem Punkt sitzen, an dem die Querbohrung zuerst die
+                    # Hauptbohrung erreicht - das ist der Punkt der inneren
+                    # Kurve mit dem KLEINSTEN Wert in achse-Richtung (nicht
+                    # der größte - an der Konsole verifiziert: der größte
+                    # Wert liefert nur den gegenüberliegenden, am weitesten
+                    # ins Material hineinragenden Punkt der Schnittkurve).
+                    # Die Fläche hat zwei echte Randkurven (innen/außen) plus
+                    # bei voll umlaufenden Zylinderflächen zusätzlich eine
+                    # gerade Nahtkante, die zuerst herausgefiltert werden muss
+                    # - sie kann die innere Kurve an einer beliebigen
+                    # Umfangsposition treffen (auch an deren tiefstem Punkt)
+                    # und würde die max()/min()-Klassifizierung sonst
+                    # verfälschen.
+                    ziel_t_achse = None
+                    try:
+                        alle_edges = subobj.Edges
+                        rand_edges = [e for e in alle_edges if not isinstance(e.Curve, Part.Line)]
+                        if len(rand_edges) != 2:
+                            App.Console.PrintWarning(
+                                f"Gewindestift: {len(rand_edges)} echte Randkurven "
+                                f"(erwartet 2) nach Nahtfilter - Ergebnis ggf. "
+                                f"unzuverlässig\n")
+                        edge_daten = []
+                        for e in rand_edges:
+                            pts = e.discretize(50)
+                            ts = [(p - center).dot(achse) for p in pts]
+                            t_mitte = (min(ts) + max(ts)) / 2.0
+                            edge_daten.append((ts, pts, t_mitte))
+                        if edge_daten:
+                            # Innere Kurve = die mit dem größeren t_mitte
+                            # (weiter in achse-Richtung = tiefer im Material)
+                            ts_innen, pts_innen, _ = max(edge_daten, key=lambda x: x[2])
+                            idx_soll = ts_innen.index(min(ts_innen))
+                            ziel_t_achse = ts_innen[idx_soll]
+                            App.Console.PrintMessage(
+                                f"Gewindestift: Sollposition={pts_innen[idx_soll]} "
+                                f"ziel_t_achse={ziel_t_achse:.2f}mm (rel. zu CoG)\n")
+                    except Exception as ex:
+                        App.Console.PrintWarning(
+                            f"Gewindestift: Sollposition nicht ermittelbar: {ex}\n")
+                    if ziel_t_achse is None:
+                        App.Console.PrintWarning(
+                            f"Gewindestift: Fallback auf festen Versatz "
+                            f"-{GEWINDESTIFT_ZYLINDER_OFFSET:.1f}mm (kein "
+                            f"ziel_t_achse ermittelbar)\n")
+
+                    synth_edge = _SyntheticEdge(
+                        _SyntheticCircle(center, achse, surf.Radius),
+                        orientierung_vorgegeben=orientierung_ok,
+                        ziel_t_achse=ziel_t_achse)
+
+                    link_name = subname.split('.')[0].strip()
+                    link = App.ActiveDocument.getObject(link_name) or s.Object
+                    return link, synth_edge, subname
+        except Exception as e:
+            App.Console.PrintWarning(f"Selektion Zylinderfläche: {e}\n")
+        return None
+
+    def _get_selektierte_querbohrung_kante(self):
+        """
+        Fallback für Gewindestifte in einer Querbohrung durch eine
+        zylindrische Nabe (z.B. Stellschraube zur Wellenbefestigung):
+        Die Randkurve am Bohrungseintritt ist dort KEIN ebener Kreis,
+        sondern die (nicht-plane) Schnittkurve zweier Zylinder (Nabe x
+        Bohrung) - "ein auf einen Zylinder projizierter Kreis".
+        Statt Achse/Mittelpunkt aus dieser Kurve selbst zu lesen (geht
+        nicht, da kein Part.Circle), werden die an die Kante angrenzenden
+        zylindrischen Flächen gesucht. Die mit dem kleineren Radius ist
+        die eigentliche Bohrung (Gewindeloch) - deren Surface liefert
+        Achse/Radius direkt, die Position kommt aus der Projektion der
+        CenterOfGravity dieser Fläche auf die Bohrungsachse.
+        Gibt (link, synthetische_kante, subname) zurück - die synthetische
+        Kante hat .Curve.Center/.Axis/.Radius wie ein echter Part.Circle,
+        damit der Rest der Einfüge-Logik unverändert funktioniert.
+        """
+        class _SyntheticCircle:
+            def __init__(self, center, axis, radius):
+                self.Center = center
+                self.Axis = axis
+                self.Radius = radius
+
+        class _SyntheticEdge:
+            """Ersatz-Kante für die Querbohrung-Erkennung - hat .Curve.Center/
+            .Axis/.Radius wie ein echtes Part.Circle-Edge, ist aber KEIN
+            echtes Part.Shape (kann nicht an ancestorsOfType() o.ae. übergeben
+            werden). Markierung _ist_synthetisch, damit schraube_einfuegen()
+            die (dafür ungeeignete) CoG-Erkennung in Schritt 3 überspringen
+            kann, statt mit TypeError/hasher-mismatch-Kaskaden zu scheitern."""
+            _ist_synthetisch = True
+
+            def __init__(self, curve):
+                self.Curve = curve
+
+        try:
+            sel = Gui.Selection.getSelectionEx('', 0)
+            for s in sel:
+                for i, subname in enumerate(s.SubElementNames):
+                    if i >= len(s.SubObjects):
+                        continue
+                    subobj = s.SubObjects[i]
+                    if subobj.ShapeType != 'Edge':
+                        continue
+                    if isinstance(subobj.Curve, Part.Circle):
+                        continue  # normale Kreiskante -> _get_selektierte_kreiskante ist zustaendig
+
+                    # Blatt-Objekt auflösen für die lokale Nachbarschaftssuche
+                    try:
+                        kette = s.Object.getSubObjectList(subname)
+                        leaf_obj = kette[-1]
+                    except Exception:
+                        leaf_obj = s.Object
+                    local_shape = getattr(leaf_obj, 'Shape', None)
+                    if local_shape is None:
+                        continue
+
+                    # Bevorzugter Weg: die NATIVE Kante direkt aus local_shape.Edges
+                    # holen (über den Index aus dem letzten SubElementName-Segment -
+                    # gleiche Technik wie in Schritt 3 von schraube_einfuegen), statt
+                    # die evtl. aus einer anderen Shape-Kopie stammende subobj-Kante
+                    # zu verwenden. ancestorsOfType() ist die eigentliche topologische
+                    # BREP-API für "angrenzende Flächen einer Kante" - sie schlägt nur
+                    # fehl, wenn Kante und Shape nicht aus derselben Shape-Instanz
+                    # stammen ("hasher mismatch"/NCollection_IndexedDataMap::
+                    # FindFromKey). Mit der nativen Kante tritt das nicht auf.
+                    letztes_segment = subname.split('.')[-1]
+                    native_edge = None
+                    if letztes_segment.startswith('Edge'):
+                        try:
+                            idx = int(letztes_segment[4:]) - 1
+                            if 0 <= idx < len(local_shape.Edges):
+                                native_edge = local_shape.Edges[idx]
+                        except Exception:
+                            native_edge = None
+
+                    faces = []
+                    if native_edge is not None:
+                        try:
+                            faces = local_shape.ancestorsOfType(native_edge, Part.Face)
+                        except Exception:
+                            faces = []
+                    if not faces:
+                        try:
+                            faces = local_shape.ancestorsOfType(subobj, Part.Face)
+                        except Exception:
+                            faces = []
+                    zyl_faces = [f for f in faces if isinstance(f.Surface, Part.Cylinder)]
+                    if faces:
+                        App.Console.PrintMessage(
+                            f"Gewindestift: {len(faces)} angrenzende Flächen via "
+                            f"ancestorsOfType gefunden ({len(zyl_faces)} zylindrisch)\n")
+
+                    if not zyl_faces:
+                        # Letztes Sicherheitsnetz, falls auch die native Kante aus
+                        # irgendeinem Grund nicht funktioniert: distanzbasierte
+                        # Prüfung über face.distToShape(edge) (respektiert die
+                        # tatsächliche Begrenzung/Trimmung der Fläche).
+                        for f in local_shape.Faces:
+                            if not isinstance(f.Surface, Part.Cylinder):
+                                continue
+                            try:
+                                dist = f.distToShape(subobj)[0]
+                            except Exception:
+                                continue
+                            if dist < 1e-3:
+                                zyl_faces.append(f)
+                        if zyl_faces:
+                            App.Console.PrintMessage(
+                                f"Gewindestift: ancestorsOfType fehlgeschlagen, "
+                                f"{len(zyl_faces)} Zylinderflächen via geometrischem "
+                                f"Fallback (distToShape) gefunden\n")
+
+                    if not zyl_faces:
+                        continue
+
+                    # Bohrung = angrenzende Zylinderflaeche mit dem kleineren Radius
+                    # (die groessere ist die Aussenflaeche der Nabe selbst)
+                    bohrung = min(zyl_faces, key=lambda f: f.Surface.Radius)
+                    surf = bohrung.Surface
+                    achse = App.Vector(surf.Axis.x, surf.Axis.y, surf.Axis.z)
+                    achse.normalize()
+
+                    # Position entlang der Achse aus der CenterOfGravity der
+                    # Bohrungsflaeche ableiten (Projektion auf die Achse)
+                    cog = bohrung.CenterOfGravity
+                    v = cog - surf.Center
+                    t = v.dot(achse)
+                    center_auf_achse = surf.Center + achse * t
+
+                    synth_edge = _SyntheticEdge(
+                        _SyntheticCircle(center_auf_achse, achse, surf.Radius))
+
+                    link_name = subname.split('.')[0].strip()
+                    link = App.ActiveDocument.getObject(link_name) or s.Object
+                    App.Console.PrintMessage(
+                        f"Gewindestift: nicht-ebene Randkurve erkannt, "
+                        f"angrenzende Bohrung R={surf.Radius:.2f} gefunden "
+                        f"({len(zyl_faces)} zylindrische Nachbarflächen)\n")
+                    return link, synth_edge, subname
+        except Exception as e:
+            App.Console.PrintWarning(f"Selektion Querbohrung: {e}\n")
+        return None
+
     def _get_selektierte_kreisflaeche(self):
         """Gibt (link, face, full_subname) zurück wenn planare Kreisfläche selektiert."""
         try:
@@ -1395,6 +1797,17 @@ class NutsAndBoltsDialog(QtWidgets.QDialog):
 
         # Aktuelle Selektion prüfen
         kreiskante = self._get_selektierte_kreiskante()
+        if kreiskante is None:
+            # Keine echte Kreiskante gefunden (z.B. weil die Bohrung nur
+            # über eine schwer treffbare Schnittkurve zugänglich ist) -
+            # bevorzugt stattdessen die zylindrische Bohrungsfläche selbst
+            # akzeptieren. Ursprünglich nur für Gewindestifte gedacht, gilt
+            # aber genauso für andere Schrauben, wenn keine Kreiskante
+            # selektierbar ist.
+            kreiskante = self._get_selektierte_zylinderflaeche_stift()
+        if kreiskante is None:
+            # Fallback: nicht-ebene Schnittkurve am Bohrungseintritt
+            kreiskante = self._get_selektierte_querbohrung_kante()
         if kreiskante is None:
             self._set_status(f"{label}: keine Kreiskante selektiert.", error=True)
             # Button wieder deaktivieren
@@ -1609,6 +2022,7 @@ class NutsAndBoltsDialog(QtWidgets.QDialog):
                 real_axis=real_axis,
                 real_center=real_center,
                 zufaellig_drehen=self._cb_zufall.isChecked(),
+                ist_gewindestift=self._ist_gewindestift,
             )
             if result is None:
                 self._set_status("Fehler beim Einfügen.", error=True)

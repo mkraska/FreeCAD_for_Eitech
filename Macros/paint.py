@@ -35,9 +35,9 @@ except ImportError:
 # Zeile 1: Gummi / Plastik
 ROW1 = [
     ("Schwarz",      (0.228000,0.228000,0.228000), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
-    ("Rot",          (0.792000,0.148000,0.148000), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
+    ("Rot",          (1.000000,0.000000,0.000000), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
     ("Orange",       (1.000000,0.505882,0.007843), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
-    ("Gelb",         (0.784314,0.658824,0.000000), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
+    ("Gelb",         (1.000000,1.000000,0.000000), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
     ("Beige (C13)",  (0.992157,0.729412,0.003922), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
     ("Blau",         (0.003922,0.329412,0.635294), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
     ("Grau",         (0.678431,0.709804,0.741176), (0.600000,0.600000,0.600000), (0.300000,0.300000,0.300000), 0.25),
@@ -233,6 +233,9 @@ def _set_appearance(vp, diffuse, specular, ambient, shininess):
             pass
 
 
+_LINK_TYPES = ("App::Link", "Assembly::AssemblyLink")
+
+
 def _get_current_selection():
     """Liest alle selektierten Objekte direkt aus der FreeCAD Selection View."""
     result = []
@@ -246,8 +249,8 @@ def _get_current_selection():
         if obj is None or obj.Name in seen:
             continue
 
-        # App::Link im Assembly
-        if obj.TypeId == "App::Link":
+        # App::Link (oder Assembly::AssemblyLink) direkt selektiert
+        if obj.TypeId in _LINK_TYPES:
             result.append((obj, "link"))
             seen.add(obj.Name)
             continue
@@ -258,15 +261,26 @@ def _get_current_selection():
             seen.add(obj.Name)
             continue
 
-        # Aus SubElementNames den Link-Namen extrahieren
+        # Verschachtelte Unterbaugruppe (obj ist der Assembly-Container,
+        # z.B. Assembly::AssemblyObject): über getSubObjectList() die
+        # komplette Verschachtelungskette auflösen (wie in nuts_and_bolts.py/
+        # edit_constraints.py) statt nur das erste SubElementNames-Segment
+        # zu nehmen - das wäre nur der Link zur Unterbaugruppe selbst, nicht
+        # zum eigentlichen Teil. Tiefsten Link in der Kette nehmen (= das
+        # tatsächlich angeklickte Teil), nicht den äußersten Container.
         for sub in sel.SubElementNames:
-            part = sub.split('.')[0].strip()
-            if not part or part.startswith('#'):
-                continue
-            link = active_doc.getObject(part)
-            if link and link.TypeId == "App::Link" and link.Name not in seen:
-                result.append((link, "link"))
-                seen.add(link.Name)
+            try:
+                kette = obj.getSubObjectList(sub)
+            except Exception:
+                kette = []
+            gefunden = None
+            for kette_obj in reversed(kette):
+                if kette_obj.TypeId in _LINK_TYPES and kette_obj.Name not in seen:
+                    gefunden = kette_obj
+                    break
+            if gefunden is not None:
+                result.append((gefunden, "link"))
+                seen.add(gefunden.Name)
                 break
 
     return result
