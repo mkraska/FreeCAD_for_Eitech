@@ -1,3 +1,2 @@
-Images of FreeCAD models
+Images and X3D versions of FreeCAD models
 
-[Tractor](Models/Construction C12 Tractor/Traktor.xhtml)
