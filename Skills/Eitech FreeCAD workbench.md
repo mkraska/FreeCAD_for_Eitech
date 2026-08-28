@@ -5,7 +5,7 @@ description: >
   Aktiviere bei Fragen zu FreeCAD Assembly, Seilvisualisierung, Eitech-Makros,
   den Skripten rope.py, track.py, bom.py, edit_constraints.py, nuts_and_bolts.py
   oder der Eitech-Workbench-Entwicklung allgemein.
-version: "2.0"
+version: "2.2"
 ---
 
 # Eitech FreeCAD Workbench
@@ -25,6 +25,7 @@ version: "2.0"
 - ✅ Makro: Labels bereinigen (`fix_labels.py`)
 - ✅ Makro: Bindungen editieren (`edit_constraints.py` v2)
 - ✅ Makro: Schrauben/Muttern/Gewindestifte (`nuts_and_bolts.py` v0.5)
+- ✅ Makro: Teil duplizieren, inkl. Subassembly-Support (`duplicate_part.py`)
 
 ### Aktives Modell
 C18 Raupenkran – Assembly `Zusammenbau_Seilmakro`
@@ -110,6 +111,20 @@ def get_global_placement(link_obj):
   - `axis_global` zeigt vom Material weg (= Kopfseite), ermittelt über Flächennormale der anliegenden ebenen Fläche
 - `ViewObject.OverrideMaterial = True` + `ShapeMaterial.DiffuseColor` für pro-Instanz-Einfärbung von `App::Link`
 - `ViewObject.Transparency` bei `App::Link` wirkt auf alle Instanzen (nicht pro-Instanz)
+- **Bug FreeCAD 1.1**: neuer `App::Link` mit `OverrideMaterial=True` invalidiert den Render-Cache bereits vorhandener eingefärbter Links → Farbe verschwindet visuell (Daten sind noch korrekt)
+  - Workaround: `vobj.OverrideMaterial = False; vobj.OverrideMaterial = True` dokumentweit auf alle Links mit `OverrideMaterial=True` anwenden – nach jedem Duplizieren/Einfügen UND beim Öffnen/Makrostart (`refresh_colors.py`, `duplicate_part.py`)
+- **Aktive Assembly ermitteln**: `Gui.ActiveDocument.ActiveView.getActiveObject("assembly")` liefert das aktive `Assembly::AssemblyObject` – **NICHT** `getActiveObject("part")` (an der Konsole verifiziert; eine per Web-Recherche vermutete Quelle nannte fälschlich `"part"`, das liefert dort zuverlässig `None`). `isInEditMode()` auf dem Ergebnis funktioniert korrekt.
+- **ActiveDocument-Korruption**: `Gui.Selection.addSelection()` auf ein Objekt aus einer STARREN Subassembly (eigenes .FCStd, eigenes Dokument) schaltet `App.ActiveDocument` UND `Gui.ActiveDocument` still auf dieses FREMDE Dokument um – unabhängig vom sichtbar fokussierten MDI-Tab. Folge: Code, der `App.ActiveDocument` nach einem Subassembly-Klick abfragt, bekommt das falsche Dokument.
+  - Workaround: Ziel-Dokument/aktive Assembly EINMALIG beim Öffnen eines Dialogs "pinnen" (capture), nicht live pro Klick neu abfragen (`duplicate_part.py`: `_capture_target()`)
+  - Für robuste Objektsuche per Namen: über `App.listDocuments().values()` alle offenen Dokumente durchsuchen statt sich auf `App.ActiveDocument` zu verlassen
+- **Body-Anzeigemodus als Fehlerquelle**: `PartDesign::Body.DisplayModeBody = "Through"` statt `"Tip"` kann zu inkonsistenter/veralteter Shape-Exposition führen (Kantenindizes, Position) – Symptome: Teil an falscher Stelle, Joint-Referenzen "springen", `Solve failed`. Bereits mehrfach als Ursache aufgetreten (u.a. Flügelansatz_links/rechts in Plastik.FCStd). Scan über alle offenen Dokumente:
+  ```python
+  for doc in App.listDocuments().values():
+      for obj in doc.Objects:
+          if obj.TypeId == "PartDesign::Body" and getattr(obj, "DisplayModeBody", "Tip") != "Tip":
+              print(doc.Name, obj.Name, obj.Label, obj.DisplayModeBody)
+  ```
+  Fix: Body auswählen → PartDesign-Toolbar "Tip/Through umschalten", oder `obj.DisplayModeBody = "Tip"` + `doc.recompute()`.
 
 ### SelectionObserver
 ```python
@@ -232,6 +247,12 @@ SCHRAUBEN_BODIES = {
 # Alle in C:\Users\kraska\Documents\Eitech\CAD\Teile\Schrauben.FCStd
 ```
 
+### Dokumentarchitektur
+- Baugruppen-Dokumente (z.B. `Flügel rechts.FCStd`, `Flügel links.FCStd`) enthalten **nur** `App::Link` + Joints (`Assembly::JointGroup`) + wenige Hilfsobjekte (Origin/Line/Plane) – keine native Geometrie. Sauber, so soll es sein.
+- Echte Geometrie (Sketch/Pad/Pocket/Body) liegt ausschließlich in Teile-Bibliotheksdateien, z.B. `Teile/Schrauben.FCStd` (Schrauben/Muttern/Gewindestifte, siehe `SCHRAUBEN_BODIES`), `Plastik.FCStd` (Kunststoff-/gedruckte Teile: Winkel, Lochband, Flügelansatz, …)
+- `App::Link.LinkedObject` ist vom Typ `App::PropertyXLink`, referenziert externe Datei via relativem Pfad, z.B. `../Teile/Schrauben.FCStd`
+- **Anomalie-Warnsignal**: taucht natives Geometrie-Feature (z.B. `PartDesign::Pocket`) direkt in einem Baugruppen-Dokument auf (nicht in der Teile-Bibliothek), ist das verdächtig – vermutlich versehentlich per Copy/Paste dort gelandet statt sauber verlinkt zu sein. Prüfen mit `obj.Document.FileName`, `obj.InList`, Vergleich mit dem zuletzt gespeicherten Stand der Datei.
+
 ---
 
 ## repair_links.py
@@ -280,8 +301,10 @@ SCHRAUBEN_BODIES = {
 - Die `Solve failed` Meldungen kommen von Joints mit `Offset2.Yaw=180°` (manueller Flip)
   → erzeugt Q2.w≈0 in Placement2 → numerische Singularität im Solver
 - Q2.w≈0 Joints sind aber **korrekt platzierte Teile** – nur falsche Ausgangsorienterung
-- GroundedJoints werden vom Solver **nicht** aus dem Gleichungssystem herausgenommen
+- GroundedJoints werden vom Solver **nicht** aus dem Gleichungssystem herausgenommen (galt für Bulk-Grounding aller Links zur Performance-Optimierung – siehe unten für eine wichtige Einschränkung dieser Aussage beim gezielten Grounden einzelner Teile)
 - Flaschenhals ist die **schiere Anzahl Joints** (~100) – nicht behebbar mit Python
+- **Zweite bekannte Ursache für `Solve failed` / falsch platzierte Teile**: `PartDesign::Body.DisplayModeBody = "Through"` statt `"Tip"` beim referenzierten Body (siehe FreeCAD-spezifische Erkenntnisse oben) – unabhängig von Q2.w≈0, unbedingt zuerst prüfen, bevor man Joint-Offsets verdächtigt
+- Bei "andere Teile bewegen sich beim Ziehen mit, springen beim Recompute zurück" trotz augenscheinlich unverbundenem Joint-Graph: prüfen, ob mehrere `App::Link`-Instanzen quer durchs Modell auf dasselbe Quelldokument zeigen (`obj.LinkedObject.Document`) – der Solver/Interactive-Drag scheint pro Dokument, nicht pro Instanz zu reagieren
 
 ### Was nicht funktioniert
 - `GroundedJoint` auf alle Links → langsamer (mehr Constraints = mehr Solver-Arbeit)
@@ -308,6 +331,28 @@ JointObject.GroundedJoint(gj, link)  # link als zweites Argument!
 ```
 
 
+### Solve failed: invalid vector subscript – gezielter Absturz bei nuts_and_bolts.py-Schrauben (August 2026)
+
+Separates Problem, zu unterscheiden von der oben beschriebenen Q2.w≈0-Singularität (die wurde bereits vollständig gefunden und behoben – Placement1/2 und Offset1/2 aller betroffenen Joints in mehreren Dokumenten auf exakt 180° gescannt und repariert).
+
+**Symptom**: `AssemblyObject.cpp(170): Solve failed: invalid vector subscript` beim Aktivieren/Recompute der Assembly, reproduzierbar auch mit nur einem einzigen geladenen Dokument (`Flügel rechts.FCStd`, frischer Neustart, keine Cross-Document-Ursache). Betraf eine Gruppe von Fixed Joints, alle von `nuts_and_bolts.py` beim Einfügen von Schrauben erzeugt.
+
+**Ausgeschlossene Ursachen** (einzeln geprüft und verworfen):
+- Q1/Q2.w≈0-Singularität (180°-Rotation) – Scan über Placement1/2 und Offset1/2 zeigte keine Fundstelle bei den betroffenen Joints
+- Kinematische Schleife (Union-Find über den gesamten Joint-Graph) – 0 Schleifen gefunden
+- GroundedJoint-Konflikt – nur ein GroundedJoint vorhanden, unauffällig
+- Bug in der 180°-Flip-Korrektur von `nuts_and_bolts.py` (`fixed_joint_erstellen`, `joint_orientierung_pruefen_und_korrigieren`) – letztere Funktion wird im ganzen Makro nie aufgerufen (toter Code), `flipOnePart` läuft nur manuell über den Flip-Button (`_on_flip`)
+
+**Beobachtung**: Bisection (Joints halbweise suppressen, GUI-Reaktivierung testen) narrowte auf eine Gruppe von 6 Fixed Joints (alle Schraube→Lochband/Winkel-Referenzen). Beim systematischen Wiedereinfügen der Schrauben von Grund auf zeigte sich aber **kein festes Muster** – viele Schrauben lassen sich problemlos einfügen, irgendwann (nicht vorhersagbar an welcher Stelle) tritt der Fehler auf. Deutet auf einen echten Bug in OndselSolvers interner Redundanz-Elimination/Jacobi-Aufbau bei bestimmten Konstellationen aktiv gelöster Fixed-Joint-Ketten hin (kombinatorisch, nicht auf einen einzelnen fehlerhaften Wert zurückführbar) – vermutlich nicht auf Skript-/Makro-Ebene reparierbar, sondern ein Solver-Bug im C++-Code.
+
+**Praktischer Workaround (bestätigt wirksam)**: Sobald das Einfügen einer Schraube den Fehler auslöst, diese Schraube **grounden** (GroundedJoint, nicht den Fixed Joint suppressen!). Danach tritt der Fehler beim weiteren Einfügen nicht mehr auf.
+- Warum das vermutlich hilft: Grounden entfernt das Teil komplett aus dem Satz der vom Solver iterativ gelösten Unbekannten (Placement wird Konstante statt Variable) – der Fixed Joint zur geerdeten Schraube wird dadurch zu einer trivialen Zuweisung statt einer gekoppelten Gleichung, was den vermutlich fehlerhaften Codepfad umgeht.
+- **Unterschied zu Suppress**: Suppress deaktiviert nur die Bedingung, das Teil bleibt freie Unbekannte im Gleichungssystem und "wandert weg" (siehe „Was nicht funktioniert" oben). Grounden fixiert die Schraube dagegen an ihrer aktuellen, korrekten Position – visuell/geometrisch bleibt alles wie gewünscht.
+- **Trade-off**: Eine geerdete Schraube folgt dem Lochband/Anker-Teil bei künftigen Änderungen NICHT mehr automatisch (der Fixed Joint bleibt zwar definiert, wird aber nicht mehr aktiv mitgelöst). Bei Änderungen am Anker-Teil ggf. Erdung aufheben und neu lösen.
+- Einschränkung der obigen Notiz „GroundedJoints werden vom Solver nicht aus dem Gleichungssystem herausgenommen": das bezog sich auf Bulk-Grounding aller ~100 Links zur Performance-Optimierung (dort tatsächlich langsamer). Für das gezielte Grounden einer einzelnen abstürzenden Schraube gilt das nicht – dort verschwindet der Crash zuverlässig.
+
+**Nicht weiter systematisch untersucht** (Zeitgrund, August 2026) – falls das Problem erneut relevant wird: Minimal-Reproduktionsfall bauen (z.B. testen ob `Detach1=True` mit eingefrorener Placement schon reicht oder ob es die volle 6-DOF-Erdung braucht) und bei FreeCAD upstream melden (OndselSolver), da es sich vermutlich um einen echten Solver-Bug handelt, keinen Modellierungsfehler.
+
 ### edit_constraints.py – v2
 (Abschnitt weiter oben im Skill)
 
@@ -315,5 +360,6 @@ JointObject.GroundedJoint(gj, link)  # link als zweites Argument!
 
 ## FreeCAD-Version
 FreeCAD 1.1, Assembly Workbench
-Makros: `C:/Users/kraska/AppData/Roaming/FreeCAD/v1-1/Macro/`
+Makros: `C:/Users/kraska/Documents/GitHub/FreeCAD_for_Eitech/Macros/` (Git-Repo, direkt gesichert)
+Skills: `C:/Users/kraska/Documents/GitHub/FreeCAD_for_Eitech/Skills/` (Git-Repo, direkt gesichert)
 Projektordner: `C:/Users/kraska/Documents/Eitech/CAD/`
